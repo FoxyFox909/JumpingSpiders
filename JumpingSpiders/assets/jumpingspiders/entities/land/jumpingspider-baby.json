@@ -104,7 +104,7 @@
 						entityCodes: ["player"],
 						priority: 3.0,
 						whenInEmotionState: "aggressiveondamage",
-						// Go for whoever caused the anger first (the player who hit it or broke its hammock).
+						// Only whoever caused the anger (the player who hit it or broke its hammock), never a bystander.
 						targetEmotionSource: true,
 						onlyWhenHungry: false,
 						tamingGenerations: 1000,

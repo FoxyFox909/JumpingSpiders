@@ -115,8 +115,8 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         onlyWhenHungry = taskConfig["onlyWhenHungry"].AsBool(false);
         // true = other jumping spiders are targets only if they are of the same sex. Babies never are.
         sameSexRivalsOnly = taskConfig["sameSexRivalsOnly"].AsBool(true);
-        // true = attack whoever caused the emotion state in whenInEmotionState (for example the player who broke
-        // its hammock or hit it) before looking for anyone else.
+        // true = attack only whoever caused the emotion state in whenInEmotionState (for example the player who broke
+        // its hammock or hit it), or whoever hit it last; never anyone else that matches entityCodes.
         targetEmotionSource = taskConfig["targetEmotionSource"].AsBool(false);
         // Walking speed while stalking (vanilla movespeed units, about blocks per 1/60 s; the wolf runs at 0.04).
         moveSpeed = taskConfig["movespeed"].AsFloat(0.02f);
@@ -194,7 +194,10 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         return true;
     }
 
-    /// <summary>Who to attack: the cause of the emotion state, then whoever hit us, then the nearest fitting creature.</summary>
+    /// <summary>
+    /// Who to attack: the cause of the emotion state, then whoever hit us, then (only without targetEmotionSource)
+    /// the nearest fitting creature.
+    /// </summary>
     private Entity FindTarget()
     {
         if (targetEmotionSource && WhenInEmotionStates != null)
@@ -211,6 +214,13 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         if (RecentlyAttacked && ShouldRetaliateForRange(seekingRange) && IsReachableCandidate(attackedByEntity))
         {
             return attackedByEntity;
+        }
+        if (targetEmotionSource)
+        {
+            // An angry spider only goes for whoever angered or hit it. Without this, a wild spider bitten by something
+            // it cannot reach (or whose hammock a player broke from out of range) would turn on any player nearby,
+            // and wild spiders must stay passive to players who did not attack them first.
+            return null;
         }
         return partitionUtil.GetNearestEntity(entity.Pos.XYZ, seekingRange, IsSearchMatch, EnumEntitySearchType.Creatures);
     }

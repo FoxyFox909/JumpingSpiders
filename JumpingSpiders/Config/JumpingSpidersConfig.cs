@@ -15,7 +15,12 @@ public class JumpingSpidersConfig
 {
     // ---------------- Taming, hunger, meals ----------------
 
-    /// <summary>A spider whose "generation" is at least this is domesticated. Wild-caught spiders are generation 0.</summary>
+    /// <summary>
+    /// A spider whose "generation" is at least this is domesticated. Wild-caught spiders are generation 0.
+    /// The entity JSON gates some behaviour by generation itself, with the default of 1 written in: the player
+    /// flee tasks and the "aggressiveondamage" emotion state have maxGeneration 0, the explore task has
+    /// minGeneration 1. When changing this, change those to this value minus 1 and this value, or the two disagree.
+    /// </summary>
     public int DomesticatedFromGeneration = 1;
 
     /// <summary>A killed chicken or hare only counts as a meal when its generation is at least this (1 = farm-born).</summary>
