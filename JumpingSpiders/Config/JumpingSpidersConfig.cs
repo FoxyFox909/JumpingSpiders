@@ -87,8 +87,37 @@ public class JumpingSpidersConfig
     /// <summary>Horizontal radius, in blocks, around the spider in which build sites are sampled.</summary>
     public int HammockBuildSearchRadius = 8;
 
-    /// <summary>How many random cells are sampled per build attempt.</summary>
+    /// <summary>
+    /// How many random block columns around the spider are looked at per build attempt. Every cell of a sampled
+    /// column between HammockBuildSearchDown and HammockBuildSearchUp that can hold a hammock becomes a candidate.
+    /// </summary>
     public int HammockBuildSamples = 60;
+
+    /// <summary>Highest build site looked at, in blocks above the spider's feet (two jumps of MaxJumpUp reach 8).</summary>
+    public int HammockBuildSearchUp = 8;
+
+    /// <summary>Lowest build site looked at, in blocks below the spider's feet.</summary>
+    public int HammockBuildSearchDown = 3;
+
+    /// <summary>
+    /// How many candidate sites a build attempt checks with the jump planner before giving up. Each check is one
+    /// planner search, the expensive part, so this caps the cost of one attempt.
+    /// </summary>
+    public int HammockBuildMaxPlanAttempts = 6;
+
+    /// <summary>
+    /// Which supporting block a new hammock uses when a cell has several, best first, as directions from the hammock
+    /// to its support: north, east, south, west (walls such as tree trunks), up (hanging under a branch or ceiling),
+    /// down (lying on the ground or a branch). Directions left out are never chosen by HammockBuilder.FindSupportFacing,
+    /// which spiders use when they build. A player placing a hammock gets the face they click on, whatever this says.
+    /// </summary>
+    public string[] HammockSupportPreference = new string[] { "north", "east", "south", "west", "up", "down" };
+
+    /// <summary>
+    /// A hammock forgets the spider that claimed it when that spider is farther away than this, in blocks
+    /// (a safety net in case a sleep task ends without releasing the hammock).
+    /// </summary>
+    public double HammockClaimMaxDistance = 32;
 
     /// <summary>Preference for high build sites: weight = (height above the lowest candidate + 1) ^ bias.</summary>
     public double HammockHeightBias = 2.0;
