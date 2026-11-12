@@ -1,0 +1,30 @@
+{
+	// Creature items, the vanilla way to place a creature from the creative inventory ("Creatures" tab):
+	// right-click a block with one to spawn that spider there. Same class as vanilla's own creature items.
+	// The item jumpingspiders:creature-jumpingspider-adult-male spawns the entity jumpingspiders:jumpingspider-adult-male
+	// (ItemCreature drops the first part of the item code). A spider placed this way counts as placed by the player,
+	// so it never despawns; use /entity spawn to get one that behaves like a wild spider.
+	code: "creature",
+	class: "ItemCreature",
+	maxstacksize: 64,
+	variantgroups: [
+		{ code: "type", states: ["jumpingspider-adult-male", "jumpingspider-adult-female", "jumpingspider-baby-male", "jumpingspider-baby-female"] }
+	],
+	// The item is drawn with the entity's own shape and texture.
+	shapeByType: {
+		"*-adult-male": { base: "jumpingspiders:entity/land/jumpingspider/male" },
+		"*-adult-female": { base: "jumpingspiders:entity/land/jumpingspider/female" },
+		"*-baby-*": { base: "jumpingspiders:entity/land/jumpingspider/baby" }
+	},
+	texturesByType: {
+		"*-adult-male": { "skin": { base: "game:entity/animal/mammal/hare/european-male1" } },
+		"*-adult-female": { "skin": { base: "game:entity/animal/mammal/hare/european-female1" } },
+		"*-baby-*": { "skin": { base: "game:entity/animal/mammal/hare/european-baby" } }
+	},
+	creativeinventory: { "general": ["*"], "items": ["*"], "creatures": ["*"] },
+	materialDensity: 600,
+	heldTpIdleAnimationByType: {
+		"*-baby-*": "holdbothhands",
+		"*": "holdunderarm"
+	}
+}

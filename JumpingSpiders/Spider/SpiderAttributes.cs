@@ -39,9 +39,25 @@ public static class SpiderAttributes
     private const string SleepingKey = "sleeping";
     private const string CuriosityKey = "curiosity";
     private const string CuriosityDayKey = "curiosityDay";
+    private const string KeptByPlayerKey = "keptByPlayer";
+    private const string CreditedSaturationKey = "creditedSaturation";
+    private const string DomesticatedFlagKey = "domesticated";
 
     /// <summary>The vanilla breeding generation attribute (top level of WatchedAttributes).</summary>
     public const string GenerationKey = "generation";
+
+    /// <summary>
+    /// The vanilla breeding counter: WatchedAttributes tree "hunger", value "saturation", in food portions.
+    /// The vanilla eat task raises it, the vanilla "multiply" behavior lowers it when a female gets pregnant.
+    /// </summary>
+    public const string HungerTreeName = "hunger";
+    private const string SaturationKey = "saturation";
+
+    /// <summary>Vanilla: total in-game hours of the last meal; read by the vanilla body-weight simulation.</summary>
+    public const string LastMealHoursKey = "lastMealEatenTotalHours";
+
+    /// <summary>Vanilla: where a creature came from ("playerplaced", "reproduction", ...), in entity.Attributes.</summary>
+    public const string OriginKey = "origin";
 
     // ---------------- What kind of spider ----------------
 
@@ -94,6 +110,127 @@ public static class SpiderAttributes
     public static bool IsDomesticated(Entity entity)
     {
         return GetGeneration(entity) >= JumpingSpidersModSystem.Config.DomesticatedFromGeneration;
+    }
+
+    /// <summary>
+    /// The domesticated state as the server last wrote it. Clients use this for display, because a multiplayer
+    /// client does not load the server's config (so IsDomesticated could disagree there).
+    /// </summary>
+    public static bool GetSyncedDomesticated(Entity entity)
+    {
+        ITreeAttribute tree = GetTree(entity);
+        if (tree == null)
+        {
+            return false;
+        }
+        return tree.GetBool(DomesticatedFlagKey, false);
+    }
+
+    /// <summary>Server: writes the domesticated state for clients. Does nothing when it did not change.</summary>
+    public static void SetSyncedDomesticated(Entity entity, bool domesticated)
+    {
+        ITreeAttribute tree = GetOrCreateTree(entity);
+        if (tree.HasAttribute(DomesticatedFlagKey) && tree.GetBool(DomesticatedFlagKey) == domesticated)
+        {
+            return;
+        }
+        tree.SetBool(DomesticatedFlagKey, domesticated);
+        MarkDirty(entity);
+    }
+
+    // ---------------- Kept by the player (never despawns) ----------------
+
+    /// <summary>True once the spider was caught, placed, bred or fed by the player. Never cleared.</summary>
+    public static bool IsMarkedKeptByPlayer(Entity entity)
+    {
+        ITreeAttribute tree = GetTree(entity);
+        if (tree == null)
+        {
+            return false;
+        }
+        return tree.GetBool(KeptByPlayerKey, false);
+    }
+
+    public static void MarkKeptByPlayer(Entity entity)
+    {
+        if (IsMarkedKeptByPlayer(entity))
+        {
+            return;
+        }
+        ITreeAttribute tree = GetOrCreateTree(entity);
+        tree.SetBool(KeptByPlayerKey, true);
+        MarkDirty(entity);
+    }
+
+    /// <summary>The vanilla "origin" of the creature (entity.Attributes, server only), or null.</summary>
+    public static string GetOrigin(Entity entity)
+    {
+        return entity.Attributes.GetString(OriginKey, null);
+    }
+
+    // ---------------- Breeding saturation (vanilla counter plus our credit) ----------------
+
+    /// <summary>The vanilla breeding saturation, in food portions.</summary>
+    public static float GetBreedingSaturation(Entity entity)
+    {
+        ITreeAttribute hunger = entity.WatchedAttributes.GetTreeAttribute(HungerTreeName);
+        if (hunger == null)
+        {
+            return 0;
+        }
+        return hunger.GetFloat(SaturationKey, 0);
+    }
+
+    /// <summary>
+    /// Sets the vanilla breeding saturation. MarkPathDirty("hunger") also runs the modified-listeners on that
+    /// path, including the spider's own saturation guard.
+    /// </summary>
+    public static void SetBreedingSaturation(Entity entity, float saturation)
+    {
+        ITreeAttribute hunger = entity.WatchedAttributes.GetOrAddTreeAttribute(HungerTreeName);
+        hunger.SetFloat(SaturationKey, saturation);
+        entity.WatchedAttributes.MarkPathDirty(HungerTreeName);
+    }
+
+    /// <summary>True once the spider has a credited-saturation record (every spider gets one on its first load).</summary>
+    public static bool HasCreditedSaturation(Entity entity)
+    {
+        ITreeAttribute tree = GetTree(entity);
+        return tree != null && tree.HasAttribute(CreditedSaturationKey);
+    }
+
+    /// <summary>How much of the breeding saturation came from real meals (live farm-born prey), in portions.</summary>
+    public static float GetCreditedSaturation(Entity entity)
+    {
+        ITreeAttribute tree = GetTree(entity);
+        if (tree == null)
+        {
+            return 0;
+        }
+        return tree.GetFloat(CreditedSaturationKey, 0);
+    }
+
+    public static void SetCreditedSaturation(Entity entity, float saturation)
+    {
+        ITreeAttribute tree = GetOrCreateTree(entity);
+        tree.SetFloat(CreditedSaturationKey, saturation);
+        MarkDirty(entity);
+    }
+
+    // ---------------- Growing up ----------------
+
+    /// <summary>
+    /// Copies all of our saved state from one entity to another. Used when a baby turns into an adult, because the
+    /// vanilla grow behavior only copies the generation to the new adult entity.
+    /// </summary>
+    public static void CopyStateTo(Entity from, Entity to)
+    {
+        ITreeAttribute tree = GetTree(from);
+        if (tree == null)
+        {
+            return;
+        }
+        to.WatchedAttributes.SetAttribute(TreeName, tree.Clone());
     }
 
     // ---------------- Hunger ----------------

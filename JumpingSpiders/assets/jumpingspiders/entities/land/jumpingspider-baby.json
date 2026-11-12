@@ -1,0 +1,150 @@
+{
+	// The baby jumping spider: codes jumpingspiders:jumpingspider-baby-male and jumpingspiders:jumpingspider-baby-female.
+	// It grows into the adult of the same sex (see "jumpingspiders.grow" below). Babies do not hunt, breed or build.
+	// Always write explicit domains ("game:" / "jumpingspiders:"). Every number is a placeholder to tune.
+	// No "spawnconditions": wild spiders are spawned by mod code.
+	code: "jumpingspider",
+	class: "EntityAgent",
+	tags: ["animal", "huntable", "habitat-land"],
+	// Relative body weight used by vanilla target filters (hare 0.5, fox 6).
+	weight: 0.8,
+	variantgroups: [
+		{ code: "age", states: ["baby"] },
+		{ code: "gender", states: ["male", "female"] }
+	],
+	// Collision and selection box in blocks.
+	hitboxSize: { x: 0.4, y: 0.3 },
+	deadHitboxSize: { x: 0.4, y: 0.2 },
+	eyeHeight: 0.22,
+	// 0 = no fall damage.
+	fallDamageMultiplier: 0,
+	drops: [],
+	attributes: {
+		deathByMultiplier: 0.2,
+		killedByInfoText: "deadcreature-eaten",
+		creatureDiet: {
+			weightedFoodTags: [
+				{ weight: 1, code: "meat" }
+			]
+		},
+		trappable: {
+			"small": { trapChance: 0.5, trapDestroyChance: 0 }
+		}
+	},
+	client: {
+		renderer: "Shape",
+		shape: { base: "jumpingspiders:entity/land/jumpingspider/baby" },
+		textures: {
+			"skin": { base: "game:entity/animal/mammal/hare/european-baby" }
+		},
+		// The model grows by up to this fraction as the baby ages (vanilla hare: 0.2).
+		sizeGrowthFactor: 0.2,
+		behaviors: [
+			{ code: "repulseagents" },
+			{ code: "controlledphysics", stepHeight: 1.1251 },
+			{ code: "interpolateposition" },
+			{ code: "floatupwhenstuck", onlyWhenDead: true },
+			{ code: "harvestable" },
+			{ code: "jumpingspiders.spider" }
+		],
+		animations: [
+			{ code: "idle", animation: "idle", blendMode: "AddAverage", easeOutSpeed: 4, triggeredBy: { defaultAnim: true } },
+			{ code: "walk", animation: "walk" },
+			{ code: "run", animation: "run" },
+			{ code: "jumpwindup", animation: "jumpwindup", easeInSpeed: 6, easeOutSpeed: 6, blendMode: "Average" },
+			{ code: "jump", animation: "jump", blendMode: "Average" },
+			{ code: "sleep", animation: "sleep", easeInSpeed: 4, easeOutSpeed: 4, blendMode: "Average" },
+			{ code: "hurt", animation: "hurt", animationSpeed: 2, weight: 10, blendMode: "AddAverage" },
+			{ code: "die", animation: "die", weight: 10, blendMode: "Average", triggeredBy: { onControls: ["dead"] } }
+		]
+	},
+	server: {
+		behaviors: [
+			{ code: "repulseagents" },
+			{ code: "controlledphysics", stepHeight: 1.1251 },
+			// See the adult file: wild babies despawn, babies the player caught or bred never do.
+			{ code: "despawn", minPlayerDistance: 32, minSeconds: 600 },
+			{ code: "health", currenthealth: 3, maxhealth: 3 },
+			{ code: "deaddecay", hoursToDecay: 48, decayedBlock: "game:carcass-tiny" },
+			{ code: "floatupwhenstuck", onlyWhenDead: true },
+			{ code: "harvestable", drops: [] },
+			{ code: "breathe" },
+			{
+				// Vanilla "grow" plus carrying our saved state (caught, home hammock, ...) over to the adult.
+				// hoursToGrow is in in-game hours. {gender} is filled in from this baby's code.
+				code: "jumpingspiders.grow",
+				hoursToGrow: 120,
+				adultEntityCodes: ["jumpingspiders:jumpingspider-adult-{gender}"]
+			},
+			{
+				code: "emotionstates",
+				states: [
+					{ code: "aggressiveondamage", duration: 30, chance: 1, slot: 0, priority: 2, accumType: "noaccum", maxGeneration: 0 },
+					{ code: "fleeondamage", duration: 15, chance: 1, slot: 0, priority: 1, accumType: "max" }
+				]
+			},
+			// Must stay before "taskai" (see the adult file).
+			{ code: "jumpingspiders.spider" },
+			{
+				code: "taskai",
+				aiCreatureType: "LandCreature",
+				// Builder D adds: jumpattack at players (3.0, aggressiveondamage), jumpflee (2.8 and 2.5), sleep (2.0),
+				// explore (1.3) if babies should explore. Babies never hunt prey or rivals.
+				aitasks: [
+					{
+						code: "fleeentity",
+						entityCodes: ["player"],
+						priority: 2.4,
+						maxGeneration: 0,
+						whenNotInEmotionState: "aggressiveondamage",
+						tamingGenerations: 1000,
+						movespeed: 0.035,
+						seekingRange: 10,
+						animation: "run",
+						animationSpeed: 1.8
+					},
+					{
+						code: "seekfoodandeat",
+						priority: 1.5,
+						eatLooseItems: false,
+						movespeed: 0.008,
+						eatTime: 1.5,
+						animation: "walk",
+						mincooldownHours: 2,
+						maxcooldownHours: 6
+					},
+					{
+						code: "getoutofwater",
+						priority: 1.4,
+						movespeed: 0.015,
+						animation: "walk",
+						animationSpeed: 2
+					},
+					{
+						code: "wander",
+						priority: 1.0,
+						priorityForCancel: 1.25,
+						movespeed: 0.006,
+						animation: "walk"
+					},
+					{
+						code: "idle",
+						priority: 0.9,
+						priorityForCancel: 1.25,
+						minduration: 5000,
+						maxduration: 20000,
+						mincooldown: 5000,
+						maxcooldown: 30000
+					},
+					{
+						code: "lookaround",
+						priority: 0.5
+					}
+				]
+			},
+			{ code: "entitystatetags" }
+		]
+	},
+	sounds: {
+	}
+}

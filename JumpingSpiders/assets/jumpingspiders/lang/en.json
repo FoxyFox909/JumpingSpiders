@@ -1,4 +1,15 @@
 {
 	"block-silkhammock-*": "Silk Hammock",
-	"blockdesc-silkhammock-*": "Woven by jumping spiders, who sleep in it at night. Break it to harvest flax twine; shears are the quickest tool for it."
+	"blockdesc-silkhammock-*": "Woven by jumping spiders, who sleep in it at night. Break it to harvest flax twine; shears are the quickest tool for it.",
+	"item-creature-jumpingspider-adult-male": "Jumping spider (male)",
+	"item-creature-jumpingspider-adult-female": "Jumping spider (female)",
+	"item-creature-jumpingspider-baby-male": "Jumping spiderling (male)",
+	"item-creature-jumpingspider-baby-female": "Jumping spiderling (female)",
+	"item-dead-creature-jumpingspider-*": "Dead jumping spider",
+	"prefixandcreature-jumpingspider-*": "a jumping spider",
+	"jumpingspider-infotext-wild": "Wild",
+	"jumpingspider-infotext-domesticated": "Domesticated",
+	"jumpingspider-infotext-hungry": "Hungry",
+	"jumpingspider-infotext-sated": "Sated",
+	"jumpingspider-infotext-asleep": "Asleep"
 }
