@@ -136,11 +136,47 @@ public class JumpingSpidersConfig
     /// <summary>How often the spawner checks the spider chunks near players, in real seconds.</summary>
     public double SpawnCheckIntervalSeconds = 20;
 
+    /// <summary>
+    /// Most spider chunks given a spawn attempt per check, over all players together. Bounds the work of one check.
+    /// </summary>
+    public int MaxSpawnAttemptsPerCheck = 2;
+
     /// <summary>Most wild spiders alive at once per spider chunk.</summary>
     public int MaxWildSpidersPerSpiderChunk = 1;
 
-    /// <summary>Chance (0..1) that a spider chunk gets a wild hammock.</summary>
+    /// <summary>After a wild spider spawns in a spider chunk, that chunk waits this many in-game hours before the next.</summary>
+    public double SpiderChunkSpawnCooldownHours = 12;
+
+    /// <summary>
+    /// Chance (0..1) that a newly spawned wild spider comes with a hammock: the spider chunk's existing one, or a new
+    /// one placed on a tree. A spider that rolls no hammock has no home.
+    /// </summary>
     public double WildHammockChance = 0.75;
+
+    /// <summary>
+    /// Before placing a new wild hammock, any hammock within this many blocks of the spider chunk's centre (at ground
+    /// height) is reused instead. 24 covers the whole chunk column at ground height.
+    /// </summary>
+    public double WildHammockReuseRange = 24;
+
+    /// <summary>Preference for high spots on the trunk: weight = (height above the lowest reachable spot + 1) ^ bias.</summary>
+    public double WildHammockHeightBias = 2.0;
+
+    /// <summary>
+    /// Most tree trunks whose hammock spots are tested with the jump planner per placement attempt (the expensive
+    /// part of placing a wild hammock: about 8 ms per trunk on average, 26 ms at worst, measured on generated forest).
+    /// In tests, 2 found a site as often as 4 did.
+    /// </summary>
+    public int WildHammockTreesPerAttempt = 2;
+
+    /// <summary>Ground spots around a trunk that the reach test jumps from (more = finds more routes, costs more).</summary>
+    public int WildHammockGroundStarts = 4;
+
+    /// <summary>How far from the trunk, in blocks, those ground spots may be.</summary>
+    public int WildHammockGroundRadius = 3;
+
+    /// <summary>A spider chunk where no usable tree was found is searched again after this many in-game days.</summary>
+    public double WildHammockRetryDays = 3;
 
     /// <summary>Wild spiders spawn at least this far from every player, in blocks.</summary>
     public double SpawnMinPlayerDistance = 24;
@@ -157,14 +193,35 @@ public class JumpingSpidersConfig
     /// <summary>Highest temperature at the spawn spot, degrees Celsius.</summary>
     public float SpawnMaxTemperature = 32;
 
-    /// <summary>Lowest wild hammock position, in blocks above the trunk base.</summary>
+    /// <summary>
+    /// Lowest wild hammock position, in blocks above the trunk base (0 = beside the lowest trunk block, which stands
+    /// on the ground). Within the range, the highest spots a spider can jump into are preferred.
+    /// </summary>
     public int WildHammockMinHeight = 2;
 
     /// <summary>Highest wild hammock position, in blocks above the trunk base.</summary>
     public int WildHammockMaxHeight = 8;
 
-    /// <summary>Wild spiders spawn within this many blocks of their chunk's hammock.</summary>
+    /// <summary>
+    /// By day, wild spiders spawn on the ground within this many blocks of their hammock (or, without a hammock, of a
+    /// random point of the spider chunk). Wild spiders this far outside the chunk still count for its cap.
+    /// </summary>
     public int WildSpawnRadiusFromHammock = 10;
+
+    /// <summary>Random ground spots tried per spawn before giving up on finding room for the spider.</summary>
+    public int SpawnPositionTries = 12;
+
+    /// <summary>
+    /// No wild spawn within this many blocks of a spider the player keeps (caught, placed, bred or fed), so wild
+    /// spiders do not turn up in spider farms.
+    /// </summary>
+    public double SpawnMinKeptSpiderDistance = 48;
+
+    /// <summary>
+    /// No wild spawn when players have placed more than this many blocks in the spider chunk column and the eight
+    /// columns around it (the game counts blocks placed by hand per chunk). Keeps wild spiders out of bases.
+    /// </summary>
+    public int SpawnMaxPlayerPlacedBlocks = 20;
 
     /// <summary>
     /// The jump fields as a JumpLimits object, the form the jump code in the Logic folder works with.
