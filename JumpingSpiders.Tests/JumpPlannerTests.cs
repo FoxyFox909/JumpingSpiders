@@ -200,6 +200,31 @@ public class JumpPlannerTests
     }
 
     [Fact]
+    public void HeightBiasCountsFromTheSpiderNotFromTheLowestSpot()
+    {
+        // The spider stands on a terrace 4 blocks above a lower floor. Spots down on the lower floor must not make
+        // the terrace look high: the 3-up pillar should still win most draws, as on flat ground.
+        TestBlockWorld world = new TestBlockWorld();
+        world.Fill(-12, 0, -12, 12, 0, 12);       // lower floor, feet at y = 1
+        world.Fill(-12, 1, -12, 12, 4, 0);        // terrace (z <= 0), feet at y = 5
+        world.Fill(3, 5, -1, 3, 7, -1);           // pillar on the terrace, top at y = 8 (3 up)
+
+        int onPillar = 0;
+        int runs = 400;
+        Random rand = new Random(11);
+        for (int i = 0; i < runs; i++)
+        {
+            List<JumpStep> plan = JumpPlanner.PlanJumpToRandomSpot(world, 0.5, 5, -0.5, 0.5, 5, -0.5, 6, 3, new JumpLimits(), rand);
+            Assert.NotNull(plan);
+            if (plan[0].ToY > 7.9)
+            {
+                onPillar++;
+            }
+        }
+        Assert.True(onPillar > runs / 3, "pillar picked " + onPillar + " times out of " + runs);
+    }
+
+    [Fact]
     public void RandomSpotWithoutBiasRarelyPicksThePillar()
     {
         TestBlockWorld world = FlatWorld();

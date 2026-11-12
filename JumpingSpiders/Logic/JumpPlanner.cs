@@ -112,8 +112,9 @@ public static class JumpPlanner
 
     /// <summary>
     /// Picks a random spot within radius blocks of a centre point that the spider can reach with one jump, and
-    /// returns that jump as a one-step plan (null when there is none). Higher spots are favoured by heightBias
-    /// (see HeightWeightedPicker; 0 = no preference).
+    /// returns that jump as a one-step plan (null when there is none). Spots higher than the spider's feet are favoured
+    /// by heightBias (see HeightWeightedPicker; 0 = no preference); spots at or below the spider's height all count as
+    /// equally low, so a slope or drop nearby does not water the preference down.
     /// Exploration passes a centre near the spider; fleeing passes a centre on the far side from the threat.
     /// </summary>
     public static List<JumpStep> PlanJumpToRandomSpot(IJumpWorld world, double startX, double startY, double startZ,
@@ -161,7 +162,7 @@ public static class JumpPlanner
                     node.FeetY = world.GetStandHeight(x, y, z);
                     node.FeetZ = feetZ;
                     candidates.Add(node);
-                    heights.Add(node.FeetY);
+                    heights.Add(Math.Max(node.FeetY, startY));
                 }
             }
         }
