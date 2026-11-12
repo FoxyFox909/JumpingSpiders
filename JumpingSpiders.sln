@@ -4,6 +4,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JumpingSpiders", "JumpingSp
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CakeBuild", "ZZCakeBuild\CakeBuild.csproj", "{C94810CB-AB4A-4263-8E0B-8DF2F4D2B595}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JumpingSpiders.Tests", "JumpingSpiders.Tests\JumpingSpiders.Tests.csproj", "{84735E82-EC39-4C89-A050-44013DCE3291}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +20,9 @@ Global
 		{C94810CB-AB4A-4263-8E0B-8DF2F4D2B595}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C94810CB-AB4A-4263-8E0B-8DF2F4D2B595}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C94810CB-AB4A-4263-8E0B-8DF2F4D2B595}.Release|Any CPU.Build.0 = Release|Any CPU
+		{84735E82-EC39-4C89-A050-44013DCE3291}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{84735E82-EC39-4C89-A050-44013DCE3291}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{84735E82-EC39-4C89-A050-44013DCE3291}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{84735E82-EC39-4C89-A050-44013DCE3291}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

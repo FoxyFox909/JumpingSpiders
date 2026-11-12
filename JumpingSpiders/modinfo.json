@@ -6,9 +6,9 @@
     "authors": [
         "Unknown"
     ],
-    "description": "To be added",
+    "description": "Adds jumping spiders that leap onto prey and perches, sleep in silk hammocks and can be domesticated by breeding them over generations.",
     "version": "1.0.0",
     "dependencies": {
-        "game": "1.21.0"
+        "game": "1.22.7"
     }
 }
