@@ -18,9 +18,18 @@
 	],
 	// Collision and selection box in blocks. Must fit in one block cell next to a wall so the spider can rest in a
 	// hammock: at most 0.95 wide and about 0.8 tall. The model may be larger than this.
-	hitboxSize: { x: 0.8, y: 0.6 },
+	// "ByType" picks a value per variant: the key is matched against the entity code, "*" is the fallback.
+	// The male has its real model, about 0.4 blocks tall. The female still uses the placeholder box model.
+	hitboxSizeByType: {
+		"*-male": { x: 0.8, y: 0.4 },
+		"*": { x: 0.8, y: 0.6 }
+	},
 	deadHitboxSize: { x: 0.8, y: 0.3 },
-	eyeHeight: 0.45,
+	// Height of the eyes above the feet, used for line-of-sight checks. Must be inside the hitbox.
+	eyeHeightByType: {
+		"*-male": 0.3,
+		"*": 0.45
+	},
 	// 0 = no fall damage at all (jumps go up to 6 blocks down). This also lets the vanilla pathfinder plan drops.
 	fallDamageMultiplier: 0,
 	// The jump model was measured with default physics: do not add attributes.physics here.
@@ -46,8 +55,11 @@
 		renderer: "Shape",
 		shape: { base: "jumpingspiders:entity/land/jumpingspider/{gender}" },
 		// "skin" is the texture code used in the shape files. Placeholder: a vanilla hare texture.
+		// "null" is the code VS Model Creator writes on faces that have no texture yet ("#null"), which is every
+		// face of the male model for now. Remove that line once the model has its own texture.
 		textures: {
-			"skin": { base: "game:entity/animal/mammal/hare/european-{gender}1" }
+			"skin": { base: "game:entity/animal/mammal/hare/european-{gender}1" },
+			"null": { base: "game:entity/animal/mammal/hare/european-{gender}1" }
 		},
 		behaviors: [
 			{ code: "repulseagents" },
