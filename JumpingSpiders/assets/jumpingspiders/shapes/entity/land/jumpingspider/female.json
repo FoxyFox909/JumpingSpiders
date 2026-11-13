@@ -1,0 +1,952 @@
+{
+	"textureWidth": 32,
+	"textureHeight": 32,
+	"textures": {
+		"skin": "game:entity/animal/mammal/hare/european-female1"
+	},
+	"elements": [
+		{
+			"name": "cephalothorax",
+			"from": [
+				2.0,
+				3.0,
+				4.5
+			],
+			"to": [
+				8.0,
+				8.0,
+				11.5
+			],
+			"rotationOrigin": [
+				5.0,
+				3.0,
+				8.0
+			],
+			"faces": {
+				"north": {
+					"texture": "#skin",
+					"uv": [
+						0,
+						0,
+						6.0,
+						5.0
+					]
+				},
+				"east": {
+					"texture": "#skin",
+					"uv": [
+						0,
+						0,
+						7.0,
+						5.0
+					]
+				},
+				"south": {
+					"texture": "#skin",
+					"uv": [
+						0,
+						0,
+						6.0,
+						5.0
+					]
+				},
+				"west": {
+					"texture": "#skin",
+					"uv": [
+						0,
+						0,
+						7.0,
+						5.0
+					]
+				},
+				"up": {
+					"texture": "#skin",
+					"uv": [
+						0,
+						0,
+						6.0,
+						7.0
+					]
+				},
+				"down": {
+					"texture": "#skin",
+					"uv": [
+						0,
+						0,
+						6.0,
+						7.0
+					]
+				}
+			},
+			"children": [
+				{
+					"name": "eyes",
+					"from": [
+						-0.5,
+						3.0,
+						1.0
+					],
+					"to": [
+						0.0,
+						4.5,
+						6.0
+					],
+					"rotationOrigin": [
+						0.0,
+						3.75,
+						3.5
+					],
+					"faces": {
+						"north": {
+							"texture": "#skin",
+							"uv": [
+								0,
+								0,
+								0.5,
+								1.5
+							]
+						},
+						"east": {
+							"texture": "#skin",
+							"uv": [
+								0,
+								0,
+								5.0,
+								1.5
+							]
+						},
+						"south": {
+							"texture": "#skin",
+							"uv": [
+								0,
+								0,
+								0.5,
+								1.5
+							]
+						},
+						"west": {
+							"texture": "#skin",
+							"uv": [
+								0,
+								0,
+								5.0,
+								1.5
+							]
+						},
+						"up": {
+							"texture": "#skin",
+							"uv": [
+								0,
+								0,
+								0.5,
+								5.0
+							]
+						},
+						"down": {
+							"texture": "#skin",
+							"uv": [
+								0,
+								0,
+								0.5,
+								5.0
+							]
+						}
+					}
+				},
+				{
+					"name": "abdomen",
+					"from": [
+						6.0,
+						0.0,
+						-0.5
+					],
+					"to": [
+						13.0,
+						6.0,
+						7.5
+					],
+					"rotationOrigin": [
+						6.0,
+						2.0,
+						3.5
+					],
+					"faces": {
+						"north": {
+							"texture": "#skin",
+							"uv": [
+								0,
+								4,
+								7.0,
+								10.0
+							]
+						},
+						"east": {
+							"texture": "#skin",
+							"uv": [
+								0,
+								4,
+								8.0,
+								10.0
+							]
+						},
+						"south": {
+							"texture": "#skin",
+							"uv": [
+								0,
+								4,
+								7.0,
+								10.0
+							]
+						},
+						"west": {
+							"texture": "#skin",
+							"uv": [
+								0,
+								4,
+								8.0,
+								10.0
+							]
+						},
+						"up": {
+							"texture": "#skin",
+							"uv": [
+								0,
+								4,
+								7.0,
+								12.0
+							]
+						},
+						"down": {
+							"texture": "#skin",
+							"uv": [
+								0,
+								4,
+								7.0,
+								12.0
+							]
+						}
+					}
+				},
+				{
+					"name": "legs1",
+					"from": [
+						1.0,
+						-3.0,
+						-4.5
+					],
+					"to": [
+						2.0,
+						1.0,
+						11.5
+					],
+					"rotationOrigin": [
+						1.5,
+						1.0,
+						3.5
+					],
+					"faces": {
+						"north": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								9.0,
+								4.0
+							]
+						},
+						"east": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								24.0,
+								4.0
+							]
+						},
+						"south": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								9.0,
+								4.0
+							]
+						},
+						"west": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								24.0,
+								4.0
+							]
+						},
+						"up": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								9.0,
+								16.0
+							]
+						},
+						"down": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								9.0,
+								16.0
+							]
+						}
+					}
+				},
+				{
+					"name": "legs2",
+					"from": [
+						3.0,
+						-3.0,
+						-4.5
+					],
+					"to": [
+						4.0,
+						1.0,
+						11.5
+					],
+					"rotationOrigin": [
+						3.5,
+						1.0,
+						3.5
+					],
+					"faces": {
+						"north": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								9.0,
+								4.0
+							]
+						},
+						"east": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								24.0,
+								4.0
+							]
+						},
+						"south": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								9.0,
+								4.0
+							]
+						},
+						"west": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								24.0,
+								4.0
+							]
+						},
+						"up": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								9.0,
+								16.0
+							]
+						},
+						"down": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								9.0,
+								16.0
+							]
+						}
+					}
+				},
+				{
+					"name": "legs3",
+					"from": [
+						5.0,
+						-3.0,
+						-4.0
+					],
+					"to": [
+						6.0,
+						0.5,
+						11.0
+					],
+					"rotationOrigin": [
+						5.5,
+						0.5,
+						3.5
+					],
+					"faces": {
+						"north": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								9.0,
+								3.5
+							]
+						},
+						"east": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								23.0,
+								3.5
+							]
+						},
+						"south": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								9.0,
+								3.5
+							]
+						},
+						"west": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								23.0,
+								3.5
+							]
+						},
+						"up": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								9.0,
+								15.0
+							]
+						},
+						"down": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								9.0,
+								15.0
+							]
+						}
+					}
+				},
+				{
+					"name": "legs4",
+					"from": [
+						7.0,
+						-3.0,
+						-3.5
+					],
+					"to": [
+						8.0,
+						0.5,
+						10.5
+					],
+					"rotationOrigin": [
+						7.5,
+						0.5,
+						3.5
+					],
+					"faces": {
+						"north": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								9.0,
+								3.5
+							]
+						},
+						"east": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								22.0,
+								3.5
+							]
+						},
+						"south": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								9.0,
+								3.5
+							]
+						},
+						"west": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								22.0,
+								3.5
+							]
+						},
+						"up": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								9.0,
+								14.0
+							]
+						},
+						"down": {
+							"texture": "#skin",
+							"uv": [
+								8,
+								0,
+								9.0,
+								14.0
+							]
+						}
+					}
+				}
+			]
+		}
+	],
+	"animations": [
+		{
+			"name": "Idle",
+			"code": "idle",
+			"quantityframes": 30,
+			"onActivityStopped": "EaseOut",
+			"onAnimationEnd": "Repeat",
+			"keyframes": [
+				{
+					"frame": 0,
+					"elements": {
+						"abdomen": {
+							"offsetX": 0.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						}
+					}
+				},
+				{
+					"frame": 15,
+					"elements": {
+						"abdomen": {
+							"offsetX": 0.0,
+							"offsetY": 0.2,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Walk",
+			"code": "walk",
+			"quantityframes": 20,
+			"onActivityStopped": "Stop",
+			"onAnimationEnd": "Repeat",
+			"keyframes": [
+				{
+					"frame": 0,
+					"elements": {
+						"legs1": {
+							"offsetX": 1.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						},
+						"legs2": {
+							"offsetX": -1.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						},
+						"legs3": {
+							"offsetX": 1.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						},
+						"legs4": {
+							"offsetX": -1.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						}
+					}
+				},
+				{
+					"frame": 10,
+					"elements": {
+						"legs1": {
+							"offsetX": -1.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						},
+						"legs2": {
+							"offsetX": 1.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						},
+						"legs3": {
+							"offsetX": -1.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						},
+						"legs4": {
+							"offsetX": 1.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Run",
+			"code": "run",
+			"quantityframes": 10,
+			"onActivityStopped": "Stop",
+			"onAnimationEnd": "Repeat",
+			"keyframes": [
+				{
+					"frame": 0,
+					"elements": {
+						"legs1": {
+							"offsetX": 1.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						},
+						"legs2": {
+							"offsetX": -1.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						},
+						"legs3": {
+							"offsetX": 1.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						},
+						"legs4": {
+							"offsetX": -1.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						}
+					}
+				},
+				{
+					"frame": 5,
+					"elements": {
+						"legs1": {
+							"offsetX": -1.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						},
+						"legs2": {
+							"offsetX": 1.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						},
+						"legs3": {
+							"offsetX": -1.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						},
+						"legs4": {
+							"offsetX": 1.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Jump wind-up",
+			"code": "jumpwindup",
+			"quantityframes": 10,
+			"onActivityStopped": "EaseOut",
+			"onAnimationEnd": "Hold",
+			"keyframes": [
+				{
+					"frame": 0,
+					"elements": {
+						"legs1": {
+							"offsetX": 0.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						},
+						"cephalothorax": {
+							"offsetX": 0.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						}
+					}
+				},
+				{
+					"frame": 9,
+					"elements": {
+						"legs1": {
+							"offsetX": 0.0,
+							"offsetY": 2.5,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						},
+						"cephalothorax": {
+							"offsetX": 0.0,
+							"offsetY": -0.8,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Jump",
+			"code": "jump",
+			"quantityframes": 10,
+			"onActivityStopped": "Stop",
+			"onAnimationEnd": "Hold",
+			"keyframes": [
+				{
+					"frame": 0,
+					"elements": {
+						"legs1": {
+							"offsetX": 0.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						},
+						"legs4": {
+							"offsetX": 0.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						}
+					}
+				},
+				{
+					"frame": 9,
+					"elements": {
+						"legs1": {
+							"offsetX": -1.5,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						},
+						"legs4": {
+							"offsetX": 1.5,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Sleep",
+			"code": "sleep",
+			"quantityframes": 30,
+			"onActivityStopped": "EaseOut",
+			"onAnimationEnd": "Repeat",
+			"keyframes": [
+				{
+					"frame": 0,
+					"elements": {
+						"cephalothorax": {
+							"offsetX": 0.0,
+							"offsetY": -1.5,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						}
+					}
+				},
+				{
+					"frame": 15,
+					"elements": {
+						"cephalothorax": {
+							"offsetX": 0.0,
+							"offsetY": -1.4,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Hurt",
+			"code": "hurt",
+			"quantityframes": 10,
+			"onActivityStopped": "PlayTillEnd",
+			"onAnimationEnd": "Stop",
+			"keyframes": [
+				{
+					"frame": 0,
+					"elements": {
+						"cephalothorax": {
+							"offsetX": 0.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						}
+					}
+				},
+				{
+					"frame": 4,
+					"elements": {
+						"cephalothorax": {
+							"offsetX": 0.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": -12.0
+						}
+					}
+				},
+				{
+					"frame": 9,
+					"elements": {
+						"cephalothorax": {
+							"offsetX": 0.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Die",
+			"code": "die",
+			"quantityframes": 20,
+			"onActivityStopped": "PlayTillEnd",
+			"onAnimationEnd": "Hold",
+			"keyframes": [
+				{
+					"frame": 0,
+					"elements": {
+						"cephalothorax": {
+							"offsetX": 0.0,
+							"offsetY": 0.0,
+							"offsetZ": 0.0,
+							"rotationX": 0.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						}
+					}
+				},
+				{
+					"frame": 19,
+					"elements": {
+						"cephalothorax": {
+							"offsetX": 0.0,
+							"offsetY": 5.0,
+							"offsetZ": 0.0,
+							"rotationX": 180.0,
+							"rotationY": 0.0,
+							"rotationZ": 0.0
+						}
+					}
+				}
+			]
+		}
+	]
+}

@@ -1,0 +1,292 @@
+{
+	// The baby jumping spider: codes jumpingspiders:jumpingspider-baby-male and jumpingspiders:jumpingspider-baby-female.
+	// It grows into the adult of the same sex (see "jumpingspiders.grow" below). Babies do not hunt, breed or build.
+	// Always write explicit domains ("game:" / "jumpingspiders:"). Every number is a placeholder to tune.
+	// No "spawnconditions": wild spiders are spawned by mod code.
+	code: "jumpingspider",
+	class: "EntityAgent",
+	tags: ["animal", "huntable", "habitat-land"],
+	// Relative body weight used by vanilla target filters (hare 0.5, fox 6).
+	weight: 0.8,
+	variantgroups: [
+		{ code: "age", states: ["baby"] },
+		{ code: "gender", states: ["male", "female"] }
+	],
+	// Collision and selection box in blocks.
+	hitboxSize: { x: 0.4, y: 0.3 },
+	deadHitboxSize: { x: 0.4, y: 0.2 },
+	eyeHeight: 0.22,
+	// 0 = no fall damage.
+	fallDamageMultiplier: 0,
+	drops: [],
+	attributes: {
+		deathByMultiplier: 0.2,
+		killedByInfoText: "deadcreature-eaten",
+		creatureDiet: {
+			weightedFoodTags: [
+				{ weight: 1, code: "meat" }
+			]
+		},
+		trappable: {
+			"small": { trapChance: 0.5, trapDestroyChance: 0 }
+		}
+	},
+	client: {
+		renderer: "Shape",
+		shape: { base: "jumpingspiders:entity/land/jumpingspider/baby" },
+		textures: {
+			"skin": { base: "game:entity/animal/mammal/hare/european-baby" }
+		},
+		// The model grows by up to this fraction as the baby ages (vanilla hare: 0.2).
+		sizeGrowthFactor: 0.2,
+		behaviors: [
+			{ code: "repulseagents" },
+			{ code: "controlledphysics", stepHeight: 1.1251 },
+			{ code: "interpolateposition" },
+			{ code: "floatupwhenstuck", onlyWhenDead: true },
+			{ code: "harvestable" },
+			{ code: "jumpingspiders.spider" }
+		],
+		animations: [
+			{ code: "idle", animation: "idle", blendMode: "AddAverage", easeOutSpeed: 4, triggeredBy: { defaultAnim: true } },
+			{ code: "walk", animation: "walk" },
+			{ code: "run", animation: "run" },
+			{ code: "jumpwindup", animation: "jumpwindup", easeInSpeed: 6, easeOutSpeed: 6, blendMode: "Average" },
+			{ code: "jump", animation: "jump", blendMode: "Average" },
+			{ code: "sleep", animation: "sleep", easeInSpeed: 4, easeOutSpeed: 4, blendMode: "Average" },
+			{ code: "hurt", animation: "hurt", animationSpeed: 2, weight: 10, blendMode: "AddAverage" },
+			{ code: "die", animation: "die", weight: 10, blendMode: "Average", triggeredBy: { onControls: ["dead"] } }
+		]
+	},
+	server: {
+		behaviors: [
+			{ code: "repulseagents" },
+			{ code: "controlledphysics", stepHeight: 1.1251 },
+			// See the adult file: wild babies despawn, babies the player caught or bred never do.
+			{ code: "despawn", minPlayerDistance: 32, minSeconds: 600 },
+			{ code: "health", currenthealth: 3, maxhealth: 3 },
+			{ code: "deaddecay", hoursToDecay: 48, decayedBlock: "game:carcass-tiny" },
+			{ code: "floatupwhenstuck", onlyWhenDead: true },
+			{ code: "harvestable", drops: [] },
+			{ code: "breathe" },
+			{
+				// Vanilla "grow" plus carrying our saved state (caught, home hammock, ...) over to the adult.
+				// hoursToGrow is in in-game hours. {gender} is filled in from this baby's code.
+				code: "jumpingspiders.grow",
+				hoursToGrow: 120,
+				adultEntityCodes: ["jumpingspiders:jumpingspider-adult-{gender}"]
+			},
+			{
+				code: "emotionstates",
+				states: [
+					{ code: "aggressiveondamage", duration: 30, chance: 1, slot: 0, priority: 2, accumType: "noaccum", maxGeneration: 0 },
+					{ code: "fleeondamage", duration: 15, chance: 1, slot: 0, priority: 1, accumType: "max" }
+				]
+			},
+			// Must stay before "taskai" (see the adult file).
+			{ code: "jumpingspiders.spider" },
+			{
+				code: "taskai",
+				aiCreatureType: "LandCreature",
+				// Spiderlings never hunt prey or rivals and are never hunted (no prey jumpattack entry here).
+				// Keep this list sorted by descending priority. Every AI tick the game walks it in this order and starts
+				// the first task that wants to run; a later task can take over from a running one only when its priority is
+				// strictly higher than the running task's priorityForCancel.
+				// The jumpingspiders.* tasks are explained in their C# files (AiTasks folder). Every key they read is
+				// written out below with the code's default, so all of them can be tuned here. Times are in milliseconds
+				// (ms), distances in blocks. Animation codes refer to "animations" above; "" = none. The physical jump
+				// ability (how high and far a jump goes) is in ModConfig/jumpingspiders.json instead.
+				aitasks: [
+					{
+						// Attack a player while angry ("aggressiveondamage": a wild spider that was hit, or whose hammock
+						// a player broke). Stalks, winds up with front legs raised, leaps and bites.
+						code: "jumpingspiders.jumpattack",
+						entityCodes: ["player"],
+						priority: 3.0,
+						whenInEmotionState: "aggressiveondamage",
+						// Only whoever caused the anger (the player who hit it or broke its hammock), never a bystander.
+						targetEmotionSource: true,
+						onlyWhenHungry: false,
+						tamingGenerations: 1000,
+						seekingRange: 10,
+						loseTargetRange: 20,
+						pounceRange: 5,
+						windUpMinMs: 500,
+						windUpMaxMs: 1250,
+						leadFactor: 0.5,
+						hitReach: 0.4,
+						damage: 1,
+						damageTier: 0,
+						damageType: "PiercingAttack",
+						knockbackStrength: 0.5,
+						movespeed: 0.03,
+						maxApproachMs: 15000,
+						repathIntervalMs: 1000,
+						pounceCheckIntervalMs: 300,
+						searchIntervalMs: 500,
+						turnSpeedDegPerSec: 360,
+						// Rest between two attacks, a random time between these (ms).
+						mincooldown: 1500,
+						maxcooldown: 3000,
+						windUpAnimation: "jumpwindup",
+						jumpAnimation: "jump",
+						walkAnimation: "walk"
+					},
+					{
+						// Flee by jumping from whoever hit it ("fleeondamage"; a hit wild spider gets angry instead, so this
+						// is mostly the domesticated spider's reaction). No wind-up, no damage.
+						code: "jumpingspiders.jumpflee",
+						priority: 2.8,
+						whenInEmotionState: "fleeondamage",
+						fleeFromEmotionSource: true,
+						safeDistance: 14,
+						fleeDurationMs: 8000,
+						jumpDistance: 4.5,
+						landingRadius: 3,
+						minDistanceGain: 1.5,
+						heightBias: 1,
+						pauseBetweenJumpsMs: 150,
+						replanIntervalMs: 500,
+						movespeed: 0.04,
+						searchIntervalMs: 250,
+						mincooldown: 500,
+						maxcooldown: 1500,
+						jumpAnimation: "jump",
+						runAnimation: "run"
+					},
+					{
+						// Wild spiders jump away from players who come too close (maxGeneration 0: domesticated ones do not).
+						// Between flee sessions the vanilla fleeentity below keeps them running.
+						code: "jumpingspiders.jumpflee",
+						entityCodes: ["player"],
+						priority: 2.5,
+						maxGeneration: 0,
+						whenNotInEmotionState: "aggressiveondamage",
+						seekingRange: 6,
+						safeDistance: 12,
+						fleeDurationMs: 5000,
+						jumpDistance: 4.5,
+						landingRadius: 3,
+						minDistanceGain: 1.5,
+						heightBias: 1,
+						pauseBetweenJumpsMs: 150,
+						replanIntervalMs: 500,
+						movespeed: 0.04,
+						searchIntervalMs: 250,
+						mincooldown: 2000,
+						maxcooldown: 4000,
+						jumpAnimation: "jump",
+						runAnimation: "run"
+					},
+					{
+						code: "fleeentity",
+						entityCodes: ["player"],
+						priority: 2.4,
+						maxGeneration: 0,
+						whenNotInEmotionState: "aggressiveondamage",
+						tamingGenerations: 1000,
+						movespeed: 0.035,
+						seekingRange: 10,
+						animation: "run",
+						animationSpeed: 1.8
+					},
+					{
+						// At night: go to a hammock (jumping up, walking first if needed), sleep until morning, hop out.
+						// Sleeps on the spot when there is no usable hammock. Which hammock: design decisions 9 and 10
+						// (home hammock for wild spiders, nearest free one for domesticated spiders).
+						code: "jumpingspiders.sleep",
+						priority: 2.0,
+						whenNotInEmotionState: "aggressiveondamage|fleeondamage",
+						// While asleep only tasks above this priority wake it (the attacker flee 2.8 and the attack 3.0
+						// do, the player flee 2.5 does not).
+						asleepPriorityForCancel: 2.6,
+						checkIntervalMs: 1000,
+						movespeed: 0.02,
+						launchSpotSearchRadius: 6,
+						maxLaunchSpotPlanChecks: 8,
+						maxTravelAttempts: 3,
+						travelTimeoutMs: 30000,
+						windUpMinMs: 200,
+						windUpMaxMs: 400,
+						pauseBetweenJumpsMs: 300,
+						turnSpeedDegPerSec: 360,
+						leaveJumpRadius: 4,
+						leaveHeightBias: 0,
+						wakeOnHurt: true,
+						// Wait before trying again after waking up or giving up (ms).
+						mincooldown: 10000,
+						maxcooldown: 20000,
+						sleepAnimation: "sleep",
+						windUpAnimation: "jumpwindup",
+						jumpAnimation: "jump",
+						walkAnimation: "walk"
+					},
+					{
+						code: "seekfoodandeat",
+						priority: 1.5,
+						eatLooseItems: false,
+						movespeed: 0.008,
+						eatTime: 1.5,
+						animation: "walk",
+						mincooldownHours: 2,
+						maxcooldownHours: 6
+					},
+					{
+						code: "getoutofwater",
+						priority: 1.4,
+						movespeed: 0.015,
+						animation: "walk",
+						animationSpeed: 2
+					},
+					{
+						// Domesticated spiders (minGeneration 1) hop around curiously, liking high spots. How often and how
+						// many hops depends on the daily curiosity roll (lower at night); see AiTaskSpiderExplore.
+						code: "jumpingspiders.explore",
+						priority: 1.3,
+						minGeneration: 1,
+						decisionIntervalMs: 4000,
+						exploreChance: 0.6,
+						continueChance: 0.75,
+						maxHops: 3,
+						landingRadius: 6,
+						heightBias: 2,
+						territoryRadius: 12,
+						pauseMinMs: 800,
+						pauseMaxMs: 3000,
+						windUpMinMs: 250,
+						windUpMaxMs: 600,
+						turnSpeedDegPerSec: 360,
+						// Rest after an outing (ms).
+						mincooldown: 8000,
+						maxcooldown: 20000,
+						windUpAnimation: "jumpwindup",
+						jumpAnimation: "jump"
+					},
+					{
+						code: "wander",
+						priority: 1.0,
+						priorityForCancel: 1.25,
+						movespeed: 0.006,
+						animation: "walk"
+					},
+					{
+						code: "idle",
+						priority: 0.9,
+						priorityForCancel: 1.25,
+						minduration: 5000,
+						maxduration: 20000,
+						mincooldown: 5000,
+						maxcooldown: 30000
+					},
+					{
+						code: "lookaround",
+						priority: 0.5
+					}
+				]
+			},
+			{ code: "entitystatetags" }
+		]
+	},
+	sounds: {
+	}
+}

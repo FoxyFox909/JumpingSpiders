@@ -1,0 +1,74 @@
+{
+	// The silk hammock jumping spiders sleep in. C# side: Hammock/BlockSilkHammock.cs and Hammock/BlockEntitySilkHammock.cs.
+	//
+	// Variants are named by the direction from the hammock to the block that holds it:
+	//   silkhammock-north / -east / -south / -west   on a wall or tree trunk on that side (shape silkhammock-wall)
+	//   silkhammock-up                               hanging under a ceiling or branch      (shape silkhammock-ceiling)
+	//   silkhammock-down                             lying on the ground or a block          (shape silkhammock-floor)
+	// The C# code reads the direction from the "side" variant group and builds codes as "silkhammock-<side>", so keep
+	// "side" the only variant group (or update BlockSilkHammock.GetVariant when adding one).
+	code: "silkhammock",
+	class: "jumpingspiders.BlockSilkHammock",
+	entityClass: "jumpingspiders.SilkHammock",
+	variantgroups: [
+		{ code: "side", states: ["north", "east", "south", "west", "up", "down"] }
+	],
+	attributes: {
+		// Breaking with shears is this many times faster than by hand or with any other tool (BlockSilkHammock.OnGettingBroken).
+		shearsBreakSpeedMultiplier: 5
+	},
+	// Only the floor variant appears in the creative inventory; placing it picks the variant from the clicked face.
+	creativeinventory: { "general": ["*-down"] },
+	drawtype: "JSON",
+	// The wall model is drawn against the SOUTH side of its cell; rotateY turns it to face the other walls
+	// (the same convention as vanilla's side mushrooms).
+	shapeByType: {
+		"*-north": { base: "jumpingspiders:block/silkhammock-wall", rotateY: 180 },
+		"*-east": { base: "jumpingspiders:block/silkhammock-wall", rotateY: 90 },
+		"*-south": { base: "jumpingspiders:block/silkhammock-wall", rotateY: 0 },
+		"*-west": { base: "jumpingspiders:block/silkhammock-wall", rotateY: 270 },
+		"*-up": { base: "jumpingspiders:block/silkhammock-ceiling" },
+		"*-down": { base: "jumpingspiders:block/silkhammock-floor" }
+	},
+	// Keys are the texture codes used inside the shapes. Placeholders from the vanilla game.
+	textures: {
+		silk: { base: "game:block/cloth/linen/normal1" },
+		strand: { base: "game:block/cloth/reedrope" }
+	},
+	// Cloth: no vanilla tool has a mining speed for it, so only the shears bonus above makes a difference.
+	blockmaterial: "Cloth",
+	// Seconds to break by hand.
+	resistance: 1.5,
+	lightAbsorption: 0,
+	sideopaque: { all: false },
+	// Nothing can be attached to a hammock (and it cannot hold another hammock).
+	sidesolid: { all: false },
+	emitSideAo: { all: false },
+	// The thin floor every variant has at the bottom of its cell, 1/16 block thick, so a spider stands inside the
+	// hammock's cell. Its top is the spider's feet height when sleeping (BlockSilkHammock.GetFloorTop).
+	collisionbox: { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.0625, z2: 1 },
+	selectionboxByType: {
+		"*-up": { x1: 0.0625, y1: 0, z1: 0.0625, x2: 0.9375, y2: 1, z2: 0.9375 },
+		"*-down": { x1: 0.0625, y1: 0, z1: 0.0625, x2: 0.9375, y2: 0.1875, z2: 0.9375 },
+		// Walls: drawn against the south side, rotated like the shape.
+		"*": {
+			x1: 0.0625, y1: 0, z1: 0.25, x2: 0.9375, y2: 0.5625, z2: 1,
+			rotateYByType: { "*-north": 180, "*-east": 90, "*-south": 0, "*-west": 270 }
+		}
+	},
+	// What breaking it gives: 2 to 4 flax twine (2: 25 %, 3: 50 %, 4: 25 %).
+	drops: [
+		{ type: "item", code: "game:flaxtwine", quantity: { avg: 3, var: 1 } }
+	],
+	sounds: {
+		place: "game:block/cloth",
+		break: "game:block/cloth",
+		hit: "game:block/cloth",
+		walk: "game:walk/cloth"
+	},
+	materialDensity: 200,
+	combustibleProps: {
+		burnTemperature: 400,
+		burnDuration: 5
+	}
+}
