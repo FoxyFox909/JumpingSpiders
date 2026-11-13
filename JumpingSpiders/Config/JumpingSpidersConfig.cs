@@ -84,6 +84,19 @@ public class JumpingSpidersConfig
     /// <summary>Curiosity is multiplied by this at night.</summary>
     public double CuriosityNightMultiplier = 0.2;
 
+    /// <summary>
+    /// Domesticated spiders stay up after dusk for (today's curiosity roll times this) in-game hours before they go
+    /// to bed: at curiosity 1, 3 hours; at 0.2, 36 minutes. Meanwhile they explore (at the night curiosity) and hunt
+    /// when hungry. 0 = they go to bed at dusk, like wild spiders always do. A spider already asleep stays asleep.
+    /// </summary>
+    public double CuriosityStayUpHoursMax = 3;
+
+    /// <summary>
+    /// Staying up after dusk never takes more than this share (0..1) of the night, so on short nights curious
+    /// spiders still get some sleep. 1 = no limit (a night shorter than the stay-up time is then spent awake).
+    /// </summary>
+    public double CuriosityStayUpMaxNightShare = 0.5;
+
     // ---------------- Hammocks ----------------
 
     /// <summary>At most one hammock per box of this many blocks on each side.</summary>
@@ -95,8 +108,10 @@ public class JumpingSpidersConfig
     /// <summary>
     /// How many random block columns around the spider are looked at per build attempt. Every cell of a sampled
     /// column between HammockBuildSearchDown and HammockBuildSearchUp that can hold a hammock becomes a candidate.
+    /// Cheap (no jump planning). With too few, a lone post or tree beside the spider is often not looked at at all,
+    /// so the spider builds on the floor: 60 missed a post about one time in four, 150 hardly ever.
     /// </summary>
-    public int HammockBuildSamples = 60;
+    public int HammockBuildSamples = 150;
 
     /// <summary>Highest build site looked at, in blocks above the spider's feet (two jumps of MaxJumpUp reach 8).</summary>
     public int HammockBuildSearchUp = 8;
@@ -106,9 +121,12 @@ public class JumpingSpidersConfig
 
     /// <summary>
     /// How many candidate sites a build attempt checks with the jump planner before giving up. Each check is one
-    /// planner search, the expensive part, so this caps the cost of one attempt.
+    /// planner search, the expensive part, so this caps the cost of one attempt. In a walled pen the highest
+    /// candidates (wall tops, the outside of the wall) cannot be reached and use up checks: with 6 checks about one
+    /// build in five failed there, with 20 about one in twenty-five. Measured cost of a whole build attempt with 20:
+    /// 6 ms on average, under 40 ms at worst, once per meal.
     /// </summary>
-    public int HammockBuildMaxPlanAttempts = 6;
+    public int HammockBuildMaxPlanAttempts = 20;
 
     /// <summary>
     /// Which supporting block a new hammock uses when a cell has several, best first, as directions from the hammock
@@ -124,8 +142,13 @@ public class JumpingSpidersConfig
     /// </summary>
     public double HammockClaimMaxDistance = 32;
 
-    /// <summary>Preference for high build sites: weight = (height above the lowest candidate + 1) ^ bias.</summary>
-    public double HammockHeightBias = 2.0;
+    /// <summary>
+    /// Preference for high build sites: weight = (height above the lowest candidate + 1) ^ bias. With 4, a site
+    /// 3 blocks up weighs as much as 256 floor sites, so a few high spots beat a whole floor of low ones; with 2 it was
+    /// only 16, and on open ground beside a post half the hammocks ended up at floor level. Raising it further makes builds in
+    /// walled pens fail more often (the unreachable wall tops get picked first; see HammockBuildMaxPlanAttempts).
+    /// </summary>
+    public double HammockHeightBias = 4.0;
 
     /// <summary>How far, in blocks, a spider looks for a free hammock at night.</summary>
     public double HammockSleepSearchRange = 24;

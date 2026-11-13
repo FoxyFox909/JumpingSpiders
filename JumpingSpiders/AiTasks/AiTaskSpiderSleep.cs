@@ -14,6 +14,12 @@ namespace JumpingSpiders;
 ///
 /// (How the game drives a task: see AiTaskSpiderJumpAttack.)
 ///
+/// Staying up: a domesticated spider does not go to bed right at dusk but stays up for its daily curiosity times
+/// Config.CuriosityStayUpHoursMax hours (SpiderAttributes.IsStayingUpAfterDusk). Meanwhile this task simply does not
+/// start, so the lower-priority tasks run: exploring (at the night curiosity) and hunting when hungry. This only
+/// delays going to bed: a spider saved asleep goes straight back to sleep, and one that is asleep is never woken by
+/// it. Wild spiders go to bed at dusk.
+///
 /// Which hammock (design decisions 9 and 10):
 /// - Wild spiders have one home hammock (SpiderAttributes.GetHomeHammock). It is forgotten when it is gone or
 ///   farther than Config.HomeHammockForgetDistance; then the nearest free hammock within
@@ -93,6 +99,7 @@ public class AiTaskSpiderSleep : AiTaskBase
     private bool walkArrived;
     private bool walkFailed;
     private bool hurt;
+    private bool stayingUp;    // only so the debug log says when staying up begins and ends
 
     public AiTaskSpiderSleep(EntityAgent entity, JsonObject taskConfig, JsonObject aiConfig)
         : base(entity, taskConfig, aiConfig)
@@ -188,6 +195,23 @@ public class AiTaskSpiderSleep : AiTaskBase
         if (entity.Swimming || entity.FeetInLiquid || (!resuming && !entity.OnGround))
         {
             return false;
+        }
+        // Checked last because it looks back through the evening for the sunset (cheap, but not free).
+        if (!resuming && SpiderAttributes.IsStayingUpAfterDusk(entity))
+        {
+            if (!stayingUp)
+            {
+                stayingUp = true;
+                SpiderTaskUtil.Log(entity, LogName, "stays up after dusk, for up to "
+                    + SpiderAttributes.GetStayUpHours(entity).ToString("0.0") + " h (curiosity "
+                    + SpiderAttributes.GetDailyCuriosity(entity).ToString("0.00") + ")");
+            }
+            return false;
+        }
+        if (stayingUp)
+        {
+            stayingUp = false;
+            SpiderTaskUtil.Log(entity, LogName, "has stayed up long enough: goes to bed");
         }
         return true;
     }

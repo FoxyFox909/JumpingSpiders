@@ -103,6 +103,21 @@ public static class SpiderCommandText
         }
         text.AppendLine("Asleep: " + asleep + " (it is " + night + " there).");
 
+        // Reading the curiosity rolls today's value if nothing has asked for it yet; that is the same roll the
+        // spider would get anyway.
+        string stayUp = "goes to bed at dusk";
+        double stayUpHours = SpiderAttributes.GetStayUpHours(spider);
+        if (stayUpHours > 0)
+        {
+            stayUp = string.Format("stays up {0:0.0} h after dusk", stayUpHours);
+            if (SpiderAttributes.IsStayingUpAfterDusk(spider))
+            {
+                stayUp = stayUp + ", and is staying up now";
+            }
+        }
+        text.AppendLine(string.Format("Curiosity today: {0:0.00} ({1:0.00} right now); {2}.",
+            SpiderAttributes.GetDailyCuriosity(spider), SpiderAttributes.GetCuriosity(spider), stayUp));
+
         BlockPos home = SpiderAttributes.GetHomeHammock(spider);
         if (home == null)
         {

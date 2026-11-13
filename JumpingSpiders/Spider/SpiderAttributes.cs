@@ -329,28 +329,65 @@ public static class SpiderAttributes
     /// </summary>
     public static double GetCuriosity(Entity entity)
     {
+        double curiosity = GetDailyCuriosity(entity);
+        if (IsNight(entity.World, entity.Pos.XYZ))
+        {
+            curiosity = curiosity * JumpingSpidersModSystem.Config.CuriosityNightMultiplier;
+        }
+        return curiosity;
+    }
+
+    /// <summary>
+    /// Today's curiosity roll (Config.CuriosityMin..CuriosityMax), without the night factor. Rolled on the first call
+    /// of an in-game day, whoever asks first (exploring or the sleep task), so both see the same value. A day starts
+    /// at midnight. Call on the server: the roll is written to the entity.
+    /// </summary>
+    public static double GetDailyCuriosity(Entity entity)
+    {
         JumpingSpidersConfig config = JumpingSpidersModSystem.Config;
         ITreeAttribute tree = GetOrCreateTree(entity);
         int today = (int)Math.Floor(entity.World.Calendar.TotalDays);
 
-        double curiosity;
         if (tree.HasAttribute(CuriosityKey) && tree.GetInt(CuriosityDayKey, -1) == today)
         {
-            curiosity = tree.GetDouble(CuriosityKey);
+            return tree.GetDouble(CuriosityKey);
         }
-        else
-        {
-            curiosity = config.CuriosityMin + entity.World.Rand.NextDouble() * (config.CuriosityMax - config.CuriosityMin);
-            tree.SetDouble(CuriosityKey, curiosity);
-            tree.SetInt(CuriosityDayKey, today);
-            MarkDirty(entity);
-        }
-
-        if (IsNight(entity.World, entity.Pos.XYZ))
-        {
-            curiosity = curiosity * config.CuriosityNightMultiplier;
-        }
+        double curiosity = config.CuriosityMin + entity.World.Rand.NextDouble() * (config.CuriosityMax - config.CuriosityMin);
+        tree.SetDouble(CuriosityKey, curiosity);
+        tree.SetInt(CuriosityDayKey, today);
+        MarkDirty(entity);
         return curiosity;
+    }
+
+    /// <summary>
+    /// How long this spider stays up after dusk today, in in-game hours: today's curiosity roll times
+    /// Config.CuriosityStayUpHoursMax for domesticated spiders, 0 for wild ones (they go to bed at dusk).
+    /// </summary>
+    public static double GetStayUpHours(Entity entity)
+    {
+        if (!IsDomesticated(entity))
+        {
+            return 0;
+        }
+        return StayUpAfterDusk.StayUpHours(GetDailyCuriosity(entity), JumpingSpidersModSystem.Config.CuriosityStayUpHoursMax);
+    }
+
+    /// <summary>
+    /// True while a domesticated spider is still within its stay-up time after dusk (GetStayUpHours, limited to
+    /// Config.CuriosityStayUpMaxNightShare of the night). Worked out from the sun, not from a timer, so it is right
+    /// after a chunk reload or a restart too. The sleep task asks this before it sends the spider to bed.
+    /// </summary>
+    public static bool IsStayingUpAfterDusk(Entity entity)
+    {
+        double hours = GetStayUpHours(entity);
+        if (hours <= 0)
+        {
+            return false;
+        }
+        IGameCalendar calendar = entity.World.Calendar;
+        SunHeightAt sun = new SunHeightAt(calendar, entity.Pos.XYZ);
+        return StayUpAfterDusk.IsStayingUp(sun, calendar.TotalDays, calendar.HoursPerDay, hours,
+            JumpingSpidersModSystem.Config.CuriosityStayUpMaxNightShare);
     }
 
     // ---------------- Day and night ----------------

@@ -13,7 +13,8 @@ namespace JumpingSpiders;
 /// (How the game drives a task: see AiTaskSpiderJumpAttack.)
 ///
 /// How curious it is drives everything: SpiderAttributes.GetCuriosity gives today's roll (Config.CuriosityMin..Max),
-/// already multiplied by Config.CuriosityNightMultiplier at night.
+/// already multiplied by Config.CuriosityNightMultiplier at night (it explores at night while it stays up after dusk,
+/// see AiTaskSpiderSleep).
 /// - Every decisionIntervalMs it starts an outing with probability exploreChance * curiosity (and only when the
 ///   cooldown is over and a hop is possible).
 /// - After each hop it goes on with probability continueChance * curiosity, at most maxHops hops per outing.
