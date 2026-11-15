@@ -13,17 +13,17 @@
 	"elements": [
 		{
 			"name": "Cephalothorax",
-			"from": [ 2.0, 2.0, 5.0 ],
+			"from": [ 2.0, 2.0, 4.0 ],
 			"to": [ 6.0, 6.0, 11.0 ],
 			"uv": [ 0.0, 0.0 ],
 			"rotationOrigin": [ 6.0, 6.0, 8.0 ],
 			"faces": {
-				"north": { "texture": "#null", "uv": [ 0.0, 6.0, 4.0, 10.0 ] },
-				"east": { "texture": "#null", "uv": [ 4.0, 6.0, 10.0, 10.0 ] },
-				"south": { "texture": "#null", "uv": [ 10.0, 6.0, 14.0, 10.0 ] },
-				"west": { "texture": "#null", "uv": [ 14.0, 6.0, 20.0, 10.0 ] },
-				"up": { "texture": "#null", "uv": [ 0.0, 0.0, 4.0, 6.0 ] },
-				"down": { "texture": "#null", "uv": [ 4.0, 0.0, 8.0, 6.0 ] }
+				"north": { "texture": "#null", "uv": [ 0.0, 7.0, 4.0, 11.0 ] },
+				"east": { "texture": "#null", "uv": [ 4.0, 7.0, 11.0, 11.0 ] },
+				"south": { "texture": "#null", "uv": [ 11.0, 7.0, 15.0, 11.0 ] },
+				"west": { "texture": "#null", "uv": [ 15.0, 7.0, 22.0, 11.0 ] },
+				"up": { "texture": "#null", "uv": [ 0.0, 0.0, 4.0, 7.0 ] },
+				"down": { "texture": "#null", "uv": [ 4.0, 0.0, 8.0, 7.0 ] }
 			},
 			"children": [
 				{
@@ -700,6 +700,52 @@
 						"LegR3B": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 22.5, "rotationY": 0.0, "rotationZ": 0.0 },
 						"LegR4A": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 22.5, "rotationY": 0.0, "rotationZ": 0.0 },
 						"LegR4B": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 22.5, "rotationY": 0.0, "rotationZ": 0.0 }
+					}
+				}
+			]
+		},
+
+		{
+			"name": "jumpwindup",
+			"code": "jumpwindup",
+			"quantityframes": 30,
+			"onActivityStopped": "EaseOut",
+			"onAnimationEnd": "Hold",
+			"keyframes": [
+				{
+					"frame": 0,
+					"elements": {
+						"Cephalothorax": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 },
+						"LegL1A": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 },
+						"LegL1B": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 },
+						"LegL2A": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 },
+						"LegL2B": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 },
+						"LegL3A": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 },
+						"LegL4A": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 },
+						"LegL4B": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 },
+						"LegL3B": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 },
+						"PedipalpL": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 },
+						"PedipalpLB": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 },
+						"PedipalpR": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 },
+						"PedipalpRB": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 }
+					}
+				},
+				{
+					"frame": 29,
+					"elements": {
+						"Cephalothorax": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": -12.0 },
+						"LegL1A": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.6, "rotationX": 0.0, "rotationY": -22.5, "rotationZ": -67.5 },
+						"LegL1B": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": -45.0, "rotationY": 0.0, "rotationZ": 0.0 },
+						"LegL2A": { "offsetX": 0.0, "offsetY": -0.7, "offsetZ": 0.3, "rotationX": -22.5, "rotationY": 22.5, "rotationZ": -22.5 },
+						"LegL2B": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": -22.5, "rotationY": 0.0, "rotationZ": 0.0 },
+						"LegL3A": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 22.5 },
+						"LegL4A": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 45.0 },
+						"LegL4B": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 22.5, "rotationY": 0.0, "rotationZ": 0.0 },
+						"LegL3B": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 22.5, "rotationY": 0.0, "rotationZ": 0.0 },
+						"PedipalpL": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 22.5, "rotationY": 0.0, "rotationZ": 0.0 },
+						"PedipalpLB": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": -12.0 },
+						"PedipalpR": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": -22.5, "rotationY": 0.0, "rotationZ": 0.0 },
+						"PedipalpRB": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": -12.0 }
 					}
 				}
 			]
