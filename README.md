@@ -3,8 +3,9 @@
 A Vintage Story code mod (game version 1.22.7) that adds the Jumping Spider, a passive predator that leaps onto
 its prey, and the Silk Hammock block it sleeps in.
 
-The adult male has its real model, without a texture or animations so far. Every other model, texture and
-animation in this repository is a placeholder (boxes with vanilla hare and linen textures). See
+The adult male has its real model, with walk, run and jump animations and a texture that is still being
+painted. Every other model, texture and animation in this repository is a placeholder (boxes with vanilla hare
+and linen textures). See
 [Assets to make](#assets-to-make).
 
 ## Build and run
@@ -191,7 +192,7 @@ or change the paths in the entity, block and item JSON.
 
 | File | Notes |
 |---|---|
-| `shapes/entity/land/jumpingspider/male.json` | The real adult male model. No texture or animations yet |
+| `shapes/entity/land/jumpingspider/male.json` | The real adult male model, with `walk`, `run`, `jumpwindup` and `jump`. Its texture is `textures/male.png`, still being painted |
 | `shapes/entity/land/jumpingspider/female.json`, `baby.json` | Placeholders. Texture code `skin` |
 | `shapes/block/silkhammock-wall.json` | Drawn against the south side of its cell; the JSON rotates it |
 | `shapes/block/silkhammock-floor.json`, `silkhammock-ceiling.json` | Texture codes `silk`, `strand` |
@@ -210,10 +211,9 @@ Animations each spider shape needs, with these exact lowercase codes:
 In a shape file, every keyframe element must set all six of `offsetX/Y/Z` and `rotationX/Y/Z`, or the server
 fails to load the animation.
 
-The male model's faces have no texture yet. VS Model Creator saves such faces with the texture code `null`, and
-the entity and item JSON map that code to the placeholder hare texture so the model shows up in game. When the
-model gets a texture, give it the code `skin` (or map the new code in `jumpingspider-adult.json` and
-`itemtypes/creature.json`) and remove the two `"null"` lines.
+The male model has its own texture, `textures/male.png` (96 x 96 pixels for the model's 48 x 48 texture units).
+VS Model Creator names a texture's code after its file, so the faces use `#male`, and the entity JSON and
+`itemtypes/creature.json` map `male` to `jumpingspiders:male`. If the file is renamed or moved, change both.
 
 The collision box is set per variant in the entity JSON (`hitboxSizeByType`): 0.8 wide and 0.4 high for the adult
 male, to fit its model, and 0.8 by 0.6 for the adult female. The jump planner uses it, so change it there if a

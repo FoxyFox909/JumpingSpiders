@@ -54,12 +54,13 @@
 	client: {
 		renderer: "Shape",
 		shape: { base: "jumpingspiders:entity/land/jumpingspider/{gender}" },
-		// "skin" is the texture code used in the shape files. Placeholder: a vanilla hare texture.
-		// "null" is the code VS Model Creator writes on faces that have no texture yet ("#null"), which is every
-		// face of the male model for now. Remove that line once the model has its own texture.
+		// Keys are the texture codes the shape files use on their faces ("#skin", "#male").
+		// "skin": the placeholder female model, with a vanilla hare texture.
+		// "male": the real male model. VS Model Creator names a texture code after its file, here
+		// assets/jumpingspiders/textures/male.png. The female does not use it.
 		textures: {
 			"skin": { base: "game:entity/animal/mammal/hare/european-{gender}1" },
-			"null": { base: "game:entity/animal/mammal/hare/european-{gender}1" }
+			"male": { base: "jumpingspiders:male" }
 		},
 		behaviors: [
 			{ code: "repulseagents" },

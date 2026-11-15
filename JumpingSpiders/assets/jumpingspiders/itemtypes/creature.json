@@ -17,8 +17,8 @@
 		"*-baby-*": { base: "jumpingspiders:entity/land/jumpingspider/baby" }
 	},
 	texturesByType: {
-		// "null": the male model's faces have no texture yet (see the entity JSON). Remove once it is textured.
-		"*-adult-male": { "skin": { base: "game:entity/animal/mammal/hare/european-male1" }, "null": { base: "game:entity/animal/mammal/hare/european-male1" } },
+		// The male model uses its own texture, code "male" (see the entity JSON).
+		"*-adult-male": { "male": { base: "jumpingspiders:male" } },
 		"*-adult-female": { "skin": { base: "game:entity/animal/mammal/hare/european-female1" } },
 		"*-baby-*": { "skin": { base: "game:entity/animal/mammal/hare/european-baby" } }
 	},
