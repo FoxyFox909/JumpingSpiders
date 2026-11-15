@@ -515,8 +515,8 @@
 				{
 					"frame": 0,
 					"elements": {
-						"LegL1A": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": -22.5, "rotationY": -22.5, "rotationZ": -22.5 },
-						"LegL1B": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": -22.5, "rotationY": 0.0, "rotationZ": 0.0 },
+						"LegL1A": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 12.0, "rotationY": -22.5, "rotationZ": -22.5 },
+						"LegL1B": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 },
 						"LegL2A": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 22.5, "rotationY": 0.0, "rotationZ": 45.0 },
 						"LegL3A": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": -22.5, "rotationY": -22.5, "rotationZ": -22.5 },
 						"LegL3B": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": -22.5, "rotationY": 0.0, "rotationZ": 0.0 },
@@ -537,7 +537,7 @@
 				{
 					"frame": 15,
 					"elements": {
-						"LegL1A": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 },
+						"LegL1A": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 12.0, "rotationY": 0.0, "rotationZ": 0.0 },
 						"LegL1B": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 },
 						"LegL3A": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 },
 						"LegL3B": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 },
@@ -576,7 +576,7 @@
 				{
 					"frame": 45,
 					"elements": {
-						"LegL1A": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 },
+						"LegL1A": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": -22.5, "rotationY": 0.0, "rotationZ": 0.0 },
 						"LegL1B": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 },
 						"LegL2B": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 },
 						"LegL3A": { "offsetX": 0.0, "offsetY": 0.0, "offsetZ": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0 },
@@ -592,6 +592,7 @@
 				}
 			]
 		},
+
 		{
 			"name": "run",
 			"code": "run",
