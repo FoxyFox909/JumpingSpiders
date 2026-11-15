@@ -125,9 +125,9 @@
 					"rotationOrigin": [ 8.0, 4.2, 3.5 ],
 					"faces": {
 						"north": { "texture": "#male", "uv": [ 0.0, 38.0, 2.0, 41.5 ] },
-						"east": { "texture": "#male", "uv": [ 2.0, 38.0, 7.0, 41.5 ] },
-						"south": { "texture": "#male", "uv": [ 7.0, 38.0, 9.0, 41.5 ] },
-						"west": { "texture": "#male", "uv": [ 9.0, 38.0, 14.0, 41.5 ] },
+						"east": { "texture": "#male", "uv": [ 2.0, 38.0, 7.0, 41.5 ], "windMode": [-1,-1,-1,-1], "enabled": false },
+						"south": { "texture": "#male", "uv": [ 2.0, 38.0, 4.0, 41.5 ] },
+						"west": { "texture": "#male", "uv": [ 9.0, 38.0, 14.0, 41.5 ], "windMode": [-1,-1,-1,-1], "enabled": false },
 						"up": { "texture": "#male", "uv": [ 0.0, 33.0, 2.0, 38.0 ] },
 						"down": { "texture": "#male", "uv": [ 2.0, 33.0, 4.0, 38.0 ] }
 					}
