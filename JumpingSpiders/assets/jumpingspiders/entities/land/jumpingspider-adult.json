@@ -77,7 +77,10 @@
 			{ code: "idle", animation: "idle", blendMode: "AddAverage", easeOutSpeed: 4, triggeredBy: { defaultAnim: true } },
 			{ code: "walk", animation: "walk" },
 			{ code: "run", animation: "run" },
-			{ code: "jumpwindup", animation: "jumpwindup", easeInSpeed: 6, easeOutSpeed: 6, blendMode: "Average" },
+			// The game plays 30 animation frames per second times animationSpeed. The male's wind-up is 30 frames and
+			// holds its last frame, so at 4 the front legs are up after 0.25 s and stay up for the rest of the wind-up
+			// (the tasks' windUpMinMs..windUpMaxMs: 200 to 1250 ms). At 1 the raise would take a full second.
+			{ code: "jumpwindup", animation: "jumpwindup", animationSpeed: 4, easeInSpeed: 6, easeOutSpeed: 6, blendMode: "Average" },
 			{ code: "jump", animation: "jump", blendMode: "Average" },
 			{ code: "sleep", animation: "sleep", easeInSpeed: 4, easeOutSpeed: 4, blendMode: "Average" },
 			{ code: "hurt", animation: "hurt", animationSpeed: 2, weight: 10, blendMode: "AddAverage" },
