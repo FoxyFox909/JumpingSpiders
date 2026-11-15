@@ -19,6 +19,11 @@ namespace JumpingSpiders;
 /// otherwise on the ground within Config.WildSpawnRadiusFromHammock of it), other mods may veto the spawn through
 /// the game's own "try spawn entity" event, and the spider is created.
 ///
+/// A forced spawn (/jspider spawn: SpawnRequest.Forced and SpawnNear) runs the same steps in any chunk, but the
+/// checks that decide whether a spider should spawn here only record why a natural spawn would not happen
+/// (SpawnResult.BypassedRules); the spider appears a few blocks from SpawnNear, and its hammock is looked for and
+/// placed near there too. The spider itself is no different from a natural one.
+///
 /// A wild spider is an adult of either sex, generation 0, with no "origin" attribute (an origin of "playerplaced"
 /// or "reproduction" would mark it as kept, so it would never despawn), and with its home hammock set if it has one.
 /// </summary>
@@ -37,6 +42,16 @@ public static class WildSpiderSpawner
     public const int GroundSearchUp = 3;
     public const int GroundSearchDown = 3;
 
+    /// <summary>
+    /// A forced spawn (SpawnRequest.SpawnNear, from /jspider spawn) puts the spider on the ground this many blocks
+    /// from the player, horizontally: close enough to see at once, not so close that it appears inside the player.
+    /// </summary>
+    public const double ForcedSpawnMinDistance = 2;
+    public const double ForcedSpawnMaxDistance = 5;
+
+    /// <summary>A forced spawn spot is at most this many blocks above or below the player's feet.</summary>
+    public const int ForcedSpawnMaxHeightDifference = 3;
+
     public static SpawnResult TrySpawn(ICoreServerAPI api, SpawnRequest request)
     {
         SpawnResult result = new SpawnResult();
@@ -45,9 +60,10 @@ public static class WildSpiderSpawner
         int chunkX = request.ChunkX;
         int chunkZ = request.ChunkZ;
 
-        if (!SpiderChunks.IsSpiderChunk(world.Seed, chunkX, chunkZ, config.SpiderChunkFraction))
+        if (!SpiderChunks.IsSpiderChunk(world.Seed, chunkX, chunkZ, config.SpiderChunkFraction)
+            && Refuses(request, result, SpawnOutcome.NotSpiderChunk, "Chunk " + chunkX + ", " + chunkZ + " is not a spider chunk."))
         {
-            return result.Fail(SpawnOutcome.NotSpiderChunk, "Chunk " + chunkX + ", " + chunkZ + " is not a spider chunk.");
+            return result;
         }
 
         IMapChunk mapChunk = api.WorldManager.GetMapChunk(chunkX, chunkZ);
@@ -58,50 +74,60 @@ public static class WildSpiderSpawner
 
         WildHammockRecord record = WildHammockRecords.Load(mapChunk);
         double now = world.Calendar.TotalHours;
-        if (request.CheckCooldown && !SpawnRules.IsCooldownOver(record.LastSpawnTotalHours, now, config.SpiderChunkSpawnCooldownHours))
+        if (!SpawnRules.IsCooldownOver(record.LastSpawnTotalHours, now, config.SpiderChunkSpawnCooldownHours)
+            && Refuses(request, result, SpawnOutcome.Cooldown, string.Format("A spider spawned here {0:0.0} in-game hours ago (cooldown {1} hours).",
+                now - record.LastSpawnTotalHours, config.SpiderChunkSpawnCooldownHours)))
         {
-            return result.Fail(SpawnOutcome.Cooldown, string.Format("A spider spawned here {0:0.0} in-game hours ago (cooldown {1} hours).",
-                now - record.LastSpawnTotalHours, config.SpiderChunkSpawnCooldownHours));
+            return result;
         }
 
         BlockPos center = WildHammockSites.ChunkCenterAtGround(mapChunk, chunkX, chunkZ);
         ClimateCondition climate = GetSpawnClimate(world, center);
         if (climate == null)
         {
-            return result.Fail(SpawnOutcome.NoClimateData, "No climate data here.");
+            if (Refuses(request, result, SpawnOutcome.NoClimateData, "No climate data here."))
+            {
+                return result;
+            }
         }
-        if (!ClimateAllows(climate))
+        else if (!ClimateAllows(climate)
+            && Refuses(request, result, SpawnOutcome.ClimateUnsuitable, "Not spider country: " + DescribeClimate(climate) + "."))
         {
-            return result.Fail(SpawnOutcome.ClimateUnsuitable, "Not spider country: " + DescribeClimate(climate) + ".");
+            return result;
         }
 
-        if (IsClaimed(world, chunkX, chunkZ, config.WildSpawnRadiusFromHammock))
+        if (IsClaimed(world, chunkX, chunkZ, config.WildSpawnRadiusFromHammock)
+            && Refuses(request, result, SpawnOutcome.Claimed, "A land claim covers this area."))
         {
-            return result.Fail(SpawnOutcome.Claimed, "A land claim covers this area.");
+            return result;
         }
 
         int placedBlocks = CountPlayerPlacedBlocks(api, chunkX, chunkZ);
-        if (placedBlocks > config.SpawnMaxPlayerPlacedBlocks)
+        if (placedBlocks > config.SpawnMaxPlayerPlacedBlocks
+            && Refuses(request, result, SpawnOutcome.PlayerBuilt, "Players placed " + placedBlocks + " blocks here and around (limit "
+                + config.SpawnMaxPlayerPlacedBlocks + ")."))
         {
-            return result.Fail(SpawnOutcome.PlayerBuilt, "Players placed " + placedBlocks + " blocks here and around (limit "
-                + config.SpawnMaxPlayerPlacedBlocks + ").");
+            return result;
         }
 
         WildSpiderCensus census = WildSpiderCensus.Take(world, chunkX, chunkZ);
-        if (census.KeptSpidersNear > 0)
+        if (census.KeptSpidersNear > 0
+            && Refuses(request, result, SpawnOutcome.NearKeptSpider, string.Format("A kept spider is {0:0} blocks away (minimum {1}).",
+                census.NearestKeptDistance, config.SpawnMinKeptSpiderDistance)))
         {
-            return result.Fail(SpawnOutcome.NearKeptSpider, string.Format("A kept spider is {0:0} blocks away (minimum {1}).",
-                census.NearestKeptDistance, config.SpawnMinKeptSpiderDistance));
+            return result;
         }
-        if (!SpawnRules.HasRoomForWildSpider(census.WildSpiders, config.MaxWildSpidersPerSpiderChunk))
+        if (!SpawnRules.HasRoomForWildSpider(census.WildSpiders, config.MaxWildSpidersPerSpiderChunk)
+            && Refuses(request, result, SpawnOutcome.CapReached, census.WildSpiders + " wild spiders already live here (cap "
+                + config.MaxWildSpidersPerSpiderChunk + ")."))
         {
-            return result.Fail(SpawnOutcome.CapReached, census.WildSpiders + " wild spiders already live here (cap "
-                + config.MaxWildSpidersPerSpiderChunk + ").");
+            return result;
         }
 
-        if (request.CheckPlayerDistance && !AnyPlayerCouldBeInRange(request.PlayerPositions, center, config))
+        if (request.CheckPlayerDistance && !AnyPlayerCouldBeInRange(request.PlayerPositions, center, config)
+            && Refuses(request, result, SpawnOutcome.NoPlayerNearby, "No player within " + config.SpawnMaxPlayerDistance + " blocks."))
         {
-            return result.Fail(SpawnOutcome.NoPlayerNearby, "No player within " + config.SpawnMaxPlayerDistance + " blocks.");
+            return result;
         }
 
         string sex = "female";
@@ -136,10 +162,26 @@ public static class WildSpiderSpawner
             {
                 result.InHammock = true;
             }
+            else if (request.SpawnNear != null)
+            {
+                result.Note("The hammock is taken or blocked, so the spider spawns on the ground.");
+            }
             else
             {
                 result.Note("The hammock is taken or blocked, so the spider spawns beside it.");
             }
+        }
+        if (spawnAt == null && request.SpawnNear != null)
+        {
+            // A forced spawn: a few blocks from the given point, wherever its hammock is.
+            StandSpot spot = NearbyStandSpot.Find(jumpWorld, request.SpawnNear.X, request.SpawnNear.Y, request.SpawnNear.Z,
+                ForcedSpawnMinDistance, ForcedSpawnMaxDistance, ForcedSpawnMaxHeightDifference, request.Rand);
+            if (spot == null)
+            {
+                return result.Fail(SpawnOutcome.NoSpawnRoom, "Found no spot with room for the spider " + ForcedSpawnMinDistance + " to "
+                    + ForcedSpawnMaxDistance + " blocks away (and at most " + ForcedSpawnMaxHeightDifference + " up or down).");
+            }
+            spawnAt = new Vec3d(spot.FeetX, spot.FeetY, spot.FeetZ);
         }
         if (spawnAt == null)
         {
@@ -171,15 +213,22 @@ public static class WildSpiderSpawner
         }
 
         // Let other mods (and vanilla's spawn filters) veto it, the same event the game's own spawner fires.
+        // A forced spawn still asks, so the reply can say so, but spawns the spider all the same.
         long herdId = api.WorldManager.GetNextUniqueId();
         EntityProperties askedType = type;
-        if (!api.Event.TriggerTrySpawnEntity(world.BlockAccessor, ref type, spawnAt, herdId))
+        if (!api.Event.TriggerTrySpawnEntity(world.BlockAccessor, ref type, spawnAt, herdId)
+            && Refuses(request, result, SpawnOutcome.Vetoed, "Another mod refused the spawn."))
         {
-            return result.Fail(SpawnOutcome.Vetoed, "Another mod refused the spawn.");
+            return result;
         }
         if (type == null || type.Code == null || !type.Code.Equals(askedType.Code))
         {
-            return result.Fail(SpawnOutcome.Vetoed, "Another mod tried to replace the spider with another creature; not spawned.");
+            if (!request.Forced)
+            {
+                return result.Fail(SpawnOutcome.Vetoed, "Another mod tried to replace the spider with another creature; not spawned.");
+            }
+            result.BypassedRules.Add("Another mod tried to replace the spider with another creature.");
+            type = askedType;
         }
 
         Entity spider = world.ClassRegistry.CreateEntity(type);
@@ -220,6 +269,19 @@ public static class WildSpiderSpawner
         result.Note(string.Format("Spawned a wild {0} (id {1}) {2} at {3:0.0}, {4:0.0}, {5:0.0}.",
             sex, spider.EntityId, where, spawnAt.X, spawnAt.Y, spawnAt.Z));
         return result;
+    }
+
+    // A natural rule says no. Normally that ends the attempt: the result fails with this outcome and sentence, and
+    // the caller returns it (true). A forced spawn only lists the sentence in BypassedRules and goes on (false).
+    private static bool Refuses(SpawnRequest request, SpawnResult result, SpawnOutcome outcome, string sentence)
+    {
+        if (request.Forced)
+        {
+            result.BypassedRules.Add(sentence);
+            return false;
+        }
+        result.Fail(outcome, sentence);
+        return true;
     }
 
     /// <summary>True when the config's forest and temperature limits allow wild spiders in this climate.</summary>

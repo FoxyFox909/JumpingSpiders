@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Vintagestory.API.Common;
 using Vintagestory.API.MathTools;
@@ -16,6 +17,12 @@ namespace JumpingSpiders;
 ///    two by way of a perch such as a branch; see HammockReachFinder). Among the reachable spots, higher ones are
 ///    much more likely (Config.WildHammockHeightBias). Only Config.WildHammockTreesPerAttempt trunks are tested.
 ///    When none works, the record says so and the chunk is not searched again for Config.WildHammockRetryDays.
+///
+/// A forced spawn (SpawnRequest.SpawnNear, from /jspider spawn) does steps 2 and 3 around its point instead, within
+/// Config.WildSpawnRadiusFromHammock, trying the nearest trunks first, in neighbouring chunks too. Its hammock is
+/// recorded as the hammock of the chunk the spawn was for, in any chunk: natural spawning only ever reads the
+/// records of spider chunks, so a record in another chunk is just remembered for the next forced spawn there.
+/// When a forced search finds no tree, nothing is recorded: it looked at only part of the chunk.
 /// </summary>
 public static class WildHammockSites
 {
@@ -47,8 +54,16 @@ public static class WildHammockSites
         }
 
         // 2. Look for a hammock that is already near: reuse it rather than placing another one close by.
+        // A forced spawn looks near its point (the player) instead of near the chunk's centre.
         BlockPos center = ChunkCenterAtGround(mapChunk, request.ChunkX, request.ChunkZ);
-        BlockEntitySilkHammock nearest = FindNearestHammock(world, center, config.WildHammockReuseRange);
+        double reuseRange = config.WildHammockReuseRange;
+        if (request.SpawnNear != null)
+        {
+            center = new BlockPos((int)Math.Floor(request.SpawnNear.X), (int)Math.Floor(request.SpawnNear.Y),
+                (int)Math.Floor(request.SpawnNear.Z), 0);
+            reuseRange = config.WildSpawnRadiusFromHammock;
+        }
+        BlockEntitySilkHammock nearest = FindNearestHammock(world, center, reuseRange);
         if (nearest != null)
         {
             BlockPos found = nearest.Pos.Copy();
@@ -58,9 +73,10 @@ public static class WildHammockSites
             return found;
         }
 
-        // 3. Place a new one, unless a recent search already found no usable tree.
+        // 3. Place a new one, unless a recent search already found no usable tree. That "no tree" is about the
+        // whole chunk, so it does not hold back a forced spawn's search near its point.
         double now = world.Calendar.TotalHours;
-        if (record.State == WildHammockState.NoSite
+        if (request.SpawnNear == null && record.State == WildHammockState.NoSite
             && !SpawnRules.ShouldSearchAgain(record.SearchedTotalHours, now, config.WildHammockRetryDays * world.Calendar.HoursPerDay))
         {
             result.NoUsableTree = true;
@@ -69,6 +85,15 @@ public static class WildHammockSites
         }
 
         BlockPos placed = PlaceOnTree(world, mapChunk, request, spiderBox, result);
+        if (placed == null && request.SpawnNear != null)
+        {
+            // Only the trees near the point were searched, so the chunk's record learns nothing.
+            result.NoUsableTree = true;
+            result.Note("No usable tree within " + config.WildSpawnRadiusFromHammock + " blocks: " + result.TrunksFound
+                + " trunks found, " + result.TrunksTested + " tested, " + result.SpotsTested
+                + " hammock spots tested, none reachable by jumping. The spider spawns without a hammock.");
+            return null;
+        }
         if (placed == null)
         {
             record.ClearHammock();
@@ -137,10 +162,20 @@ public static class WildHammockSites
     {
         JumpingSpidersConfig config = JumpingSpidersModSystem.Config;
         result.SearchedTrees = true;
-        List<TrunkColumn> trunks = TreeTrunks.FindInChunk(world.BlockAccessor, mapChunk, request.ChunkX, request.ChunkZ,
-            config.WildHammockMaxHeight + 1);
+        List<TrunkColumn> trunks;
+        if (request.SpawnNear != null)
+        {
+            // A forced spawn: the trees around its point, nearest first, so the hammock is where the player looks.
+            trunks = TreeTrunks.FindNear(world.BlockAccessor, request.SpawnNear.X, request.SpawnNear.Z,
+                config.WildSpawnRadiusFromHammock, config.WildHammockMaxHeight + 1);
+        }
+        else
+        {
+            trunks = TreeTrunks.FindInChunk(world.BlockAccessor, mapChunk, request.ChunkX, request.ChunkZ,
+                config.WildHammockMaxHeight + 1);
+            Shuffle(trunks, request);
+        }
         result.TrunksFound = trunks.Count;
-        Shuffle(trunks, request);
 
         List<HammockCandidate> reachable = new List<HammockCandidate>();
         for (int i = 0; i < trunks.Count && result.TrunksTested < request.MaxTreesToTest; i++)

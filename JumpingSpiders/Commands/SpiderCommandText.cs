@@ -211,6 +211,25 @@ public static class SpiderCommandText
         return text.ToString();
     }
 
+    /// <summary>
+    /// For /jspider spawn: the natural rules that would have stopped a natural spawn in this chunk and were skipped
+    /// (SpawnResult.BypassedRules), one per line.
+    /// </summary>
+    public static string DescribeBypassedRules(SpawnResult result)
+    {
+        if (result.BypassedRules.Count == 0)
+        {
+            return "Bypassed: nothing; a natural spawn could happen in this chunk (the distance to players is not checked here).";
+        }
+        StringBuilder text = new StringBuilder();
+        text.Append("Bypassed, so a natural spawn would not happen in this chunk:");
+        for (int i = 0; i < result.BypassedRules.Count; i++)
+        {
+            text.Append("\n  - " + result.BypassedRules[i]);
+        }
+        return text.ToString();
+    }
+
     /// <summary>The nearest few spider chunks (other than the one at chunkX, chunkZ), with direction and distance.</summary>
     public static string DescribeNearestSpiderChunks(ICoreServerAPI api, Vec3d pos, int chunkX, int chunkZ)
     {

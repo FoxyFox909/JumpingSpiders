@@ -97,7 +97,7 @@ nearest one.
 | `/jspider hungry` | Makes the spider hungry so it hunts |
 | `/jspider sated [hours]` | Makes it sated |
 | `/jspider generation <n>` | Sets its generation. 0 is wild, 1 or more is domesticated |
-| `/jspider spawn [auto\|hammock\|nohammock] [now\|day\|night]` | Tries a wild spawn in this chunk and says why it failed |
+| `/jspider spawn [auto\|hammock\|nohammock] [now\|day\|night]` | Spawns a wild spider 2 to 5 blocks from you, in any chunk, and lists the rules that would stop a natural spawn here. `hammock`: on a tree within 10 blocks (asleep in it at `night`), or none if no tree there works |
 | `/jspider build` | Makes a domesticated adult try to build a hammock now |
 
 Spiders and the hammock are also in the creative inventory. A spider placed from there counts as kept by the
@@ -111,12 +111,17 @@ ticks and stand-ins for the player, so everything a real player does or sees is 
 Use creative mode, `/time set` to move between day and night, and `/jspider info` to see a spider's state.
 
 **Spawning**
-1. Walk through a forest with `/jspider chunk` until you stand in a spider chunk, or go to one it lists.
-   Use `/jspider spawn hammock night`: a hammock appears on a tree trunk, with a spider asleep in it.
-2. `/jspider spawn hammock day`: the spider appears within 10 blocks of the hammock, not in it.
+1. Stand next to a few trees, in any chunk, and use `/jspider spawn hammock night`: a hammock appears on a
+   trunk within 10 blocks, with a spider asleep in it. The reply lists the natural rules it skipped (for example
+   "not a spider chunk"); `/jspider chunk` shows the same facts.
+2. `/jspider spawn hammock day`: the spider appears on the ground 2 to 5 blocks from you, with that hammock as its
+   home (`/jspider info`).
 3. `/jspider spawn` again in the same chunk: it reuses the existing hammock and does not make a second one.
-4. Without commands: wild spiders appear by themselves in spider chunks 24 to 80 blocks from you. This is slow
-   by design (a check every 20 seconds, 12 hours of cooldown per chunk).
+   On open grassland or sand, `/jspider spawn hammock` still gives a spider, and the reply says there was no
+   usable tree, so it has no hammock. `/jspider spawn nohammock` never makes one.
+4. Without commands: walk through a forest with `/jspider chunk` until you stand in a spider chunk, or go to one
+   it lists. Wild spiders appear by themselves in spider chunks 24 to 80 blocks from you. This is slow by design
+   (a check every 20 seconds, 12 hours of cooldown per chunk; `/jspider spawn` there starts that cooldown too).
 5. Walk more than 32 blocks from a wild spider for 10 real minutes: it is gone, and its hammock is still there.
 
 **Wild behaviour**

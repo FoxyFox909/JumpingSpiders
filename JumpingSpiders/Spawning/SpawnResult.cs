@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Vintagestory.API.Common.Entities;
 using Vintagestory.API.MathTools;
 
@@ -42,6 +43,12 @@ public class SpawnResult
     /// <summary>Hammock spots that were tested, and how many of them a spider could jump into.</summary>
     public int SpotsTested;
     public int SpotsReachable;
+
+    /// <summary>
+    /// For a forced spawn (SpawnRequest.Forced): one sentence for each natural rule that would have refused this
+    /// spawn and was skipped. Empty when a natural spawn could have happened here, and always for natural spawns.
+    /// </summary>
+    public List<string> BypassedRules = new List<string>();
 
     /// <summary>Adds a sentence to Message.</summary>
     public void Note(string sentence)
