@@ -238,7 +238,17 @@ public static class WildSpiderSpawner
             agent.HerdId = herdId;
         }
         spider.Pos.SetPos(spawnAt.X, spawnAt.Y, spawnAt.Z);
-        spider.Pos.SetYaw((float)(request.Rand.NextDouble() * GameMath.TWOPI));
+        float yaw = (float)(request.Rand.NextDouble() * GameMath.TWOPI);
+        if (result.InHammock)
+        {
+            // Asleep in its hammock: looking out of the opening, as the sleep task will turn it anyway.
+            BlockEntitySilkHammock sleepIn = HammockFinder.GetHammockAt(world, hammock);
+            if (sleepIn != null)
+            {
+                yaw = sleepIn.GetSleepYaw();
+            }
+        }
+        spider.Pos.SetYaw(yaw);
         spider.PositionBeforeFalling.Set(spawnAt.X, spawnAt.Y, spawnAt.Z);
         if (hammock != null)
         {

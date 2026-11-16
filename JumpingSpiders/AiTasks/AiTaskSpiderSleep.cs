@@ -4,6 +4,7 @@ using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
 using Vintagestory.API.Datastructures;
 using Vintagestory.API.MathTools;
+using Vintagestory.GameContent;
 
 namespace JumpingSpiders;
 
@@ -38,6 +39,11 @@ namespace JumpingSpiders;
 ///   pathfinder walks there; then it plans again.
 /// - It gives up on the hammock (and sleeps on the spot) after maxTravelAttempts plans, after travelTimeoutMs, or
 ///   when there is no launch spot or no walking path.
+///
+/// In the hammock it rests at the centre of the cell, on the cradle's bottom (on the base of a floor hammock), and
+/// looks out through the opening (BlockEntitySilkHammock.GetSleepPosition and GetSleepYaw). In a ceiling hammock it
+/// lands on a floor under the cradle and is lifted into it as it falls asleep (see BlockSilkHammock); it is put
+/// back down when it wakes.
 ///
 /// Waking up: in the morning (it then hops out with one jump to a random spot within leaveJumpRadius), when the
 /// hammock is removed (the hammock clears the sleeping flag), or when hurt. While asleep the task reports
@@ -100,6 +106,7 @@ public class AiTaskSpiderSleep : AiTaskBase
     private bool walkFailed;
     private bool hurt;
     private bool stayingUp;    // only so the debug log says when staying up begins and ends
+    private bool heldInCradle; // lifted into a ceiling hammock's cradle, physics paused (HoldStill)
 
     public AiTaskSpiderSleep(EntityAgent entity, JsonObject taskConfig, JsonObject aiConfig)
         : base(entity, taskConfig, aiConfig)
@@ -364,6 +371,12 @@ public class AiTaskSpiderSleep : AiTaskBase
         {
             hurt = true;
         }
+        // Let go at once rather than in the next AI tick: the AI stops for good if this hit kills it, and a dead
+        // spider must not stay held up in the cradle.
+        if (heldInCradle)
+        {
+            HoldStill(false);
+        }
     }
 
     public override void OnEntityDespawn(EntityDespawnData reason)
@@ -523,9 +536,14 @@ public class AiTaskSpiderSleep : AiTaskBase
             {
                 HammockPos = null;
             }
-            else
+            else if (SnapTo(hammock.GetSleepPosition()))
             {
-                SnapTo(hammock.GetSleepPosition());
+                BlockSilkHammock block = entity.World.BlockAccessor.GetBlock(HammockPos) as BlockSilkHammock;
+                if (block != null && block.LiftsSleeper())
+                {
+                    HoldStill(true);
+                }
+                FaceOut(hammock.GetSleepYaw());
             }
         }
 
@@ -543,26 +561,61 @@ public class AiTaskSpiderSleep : AiTaskBase
     }
 
     // Moves the spider exactly onto its resting spot if it is already almost there (it lands within a hair of it).
-    private void SnapTo(Vec3d sleepPos)
+    // Horizontally that is a tiny correction. Vertically it is none for wall and floor hammocks (it stands on the
+    // floor it sleeps on), and for a ceiling hammock it lifts the spider from the landing floor into the cradle
+    // (HoldStill then keeps it up there). True when it moved it.
+    private bool SnapTo(Vec3d sleepPos)
     {
         double dx = sleepPos.X - entity.Pos.X;
         double dz = sleepPos.Z - entity.Pos.Z;
         if (dx * dx + dz * dz > SnapDistance * SnapDistance)
         {
-            return;
+            return false;
         }
         entity.Pos.X = sleepPos.X;
+        entity.Pos.Y = sleepPos.Y;
         entity.Pos.Z = sleepPos.Z;
         entity.Pos.Motion.Set(0, 0, 0);
+        return true;
+    }
+
+    // Pauses (true) or resumes (false) the spider's physics. While paused, the game applies no gravity or motion to
+    // it, so a spider lifted into a ceiling hammock's cradle stays there although nothing solid is under it (the
+    // cradle has no collision box, see silkhammock.json). This is how vanilla's entity mover tool holds a creature.
+    // Changing the hammock's collision box instead does not work reliably: the game's physics keeps the block boxes
+    // around a resting entity from earlier ticks.
+    private void HoldStill(bool hold)
+    {
+        EntityBehaviorControlledPhysics physics = entity.GetBehavior<EntityBehaviorControlledPhysics>();
+        if (physics != null)
+        {
+            physics.EnableModulesApplication = !hold;
+        }
+        entity.Pos.Motion.Set(0, 0, 0);
+        heldInCradle = hold;
+    }
+
+    // Turns the spider to look out of the hammock's opening. Nothing turns it again while it sleeps: the asleep phase
+    // only keeps it from walking, and every task that turns a spider (jumping, fleeing, attacking) ends the sleep
+    // first. A spider resumed asleep after a restart comes through FallAsleep again, so it faces the same way.
+    // Yaw is the direction the entity looks; BodyYaw is the body's, which the game lets lag behind for players and
+    // some creatures, so both are set (like JumpController does).
+    private void FaceOut(float yaw)
+    {
+        entity.Pos.Yaw = yaw;
+        entity.BodyYaw = yaw;
     }
 
     // Morning: wake up and hop out of the hammock.
     private void BeginLeaving()
     {
+        // A spider held in a ceiling hammock's cradle has no OnGround while its physics is paused, but WakeUp puts it
+        // down on the landing floor, so it stands.
+        bool standing = entity.OnGround || heldInCradle;
         WakeUp();
         Phase = SleepPhase.Leaving;
         SpiderTaskUtil.Log(entity, LogName, "wakes up: morning");
-        if (leaveJumpRadius <= 0 || !entity.OnGround)
+        if (leaveJumpRadius <= 0 || !standing)
         {
             return;
         }
@@ -578,11 +631,26 @@ public class AiTaskSpiderSleep : AiTaskBase
     }
 
     // Clears the sleeping flag, frees the hammock and stops the sleep animation. Safe to call more than once.
+    // A spider held in a ceiling hammock's cradle is put back down on the landing floor and its physics resumed: it can
+    // only jump out from the floor (there is no room to jump from the cradle, right under the block above).
     private void WakeUp()
     {
         if (SpiderAttributes.IsSleeping(entity))
         {
             SpiderAttributes.SetSleeping(entity, false);
+        }
+        if (heldInCradle)
+        {
+            HoldStill(false);
+            BlockEntitySilkHammock hammock = null;
+            if (HammockPos != null)
+            {
+                hammock = HammockFinder.GetHammockAt(entity.World, HammockPos);
+            }
+            if (hammock != null)
+            {
+                entity.Pos.Y = hammock.GetStandFeetY();
+            }
         }
         ReleaseHammock();
         SpiderTaskUtil.StopAnimation(entity, sleepAnimation);

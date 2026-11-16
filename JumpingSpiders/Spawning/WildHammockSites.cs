@@ -234,14 +234,15 @@ public static class WildHammockSites
     {
         JumpingSpidersConfig config = JumpingSpidersModSystem.Config;
         List<HammockCandidate> candidates = CollectCandidates(world, trunk, request, config);
-        BlockSilkHammock anyVariant = BlockSilkHammock.GetVariant(world, BlockFacing.DOWN);
-        if (candidates.Count == 0 || anyVariant == null || anyVariant.CollisionBoxes == null || anyVariant.CollisionBoxes.Length == 0)
+        // Wild hammocks hang on trunks, so they are always wall variants, and the four wall variants have the same
+        // collision box (see silkhammock.json): any wall variant's box will do.
+        BlockSilkHammock wallVariant = BlockSilkHammock.GetVariant(world, BlockFacing.NORTH);
+        if (candidates.Count == 0 || wallVariant == null || wallVariant.CollisionBoxes == null || wallVariant.CollisionBoxes.Length == 0)
         {
             candidates.Clear();
             return candidates;
         }
-        // Every hammock variant has the same thin floor (see silkhammock.json), so any variant's box will do.
-        Cuboidf floor = anyVariant.CollisionBoxes[0];
+        Cuboidf floor = wallVariant.CollisionBoxes[0];
         RelativeBox floorBox = new RelativeBox(floor.X1, floor.Y1, floor.Z1, floor.X2, floor.Y2, floor.Z2);
         RelativeBox spider = new RelativeBox(spiderBox.X1, spiderBox.Y1, spiderBox.Z1, spiderBox.X2, spiderBox.Y2, spiderBox.Z2);
 

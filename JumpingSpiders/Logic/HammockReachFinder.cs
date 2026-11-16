@@ -11,7 +11,7 @@ namespace JumpingSpiders;
 /// How it works, for one tree:
 /// 1. FindGroundStarts: the cells around the trunk where a spider stands on the ground. The caller keeps a few.
 /// 2. MarkReachable: for each hammock spot, pretend the hammock is already there (JumpWorldWithExtraBox adds its
-///    thin floor) and try one jump from each ground start.
+///    collision box, the slab it is stood on) and try one jump from each ground start.
 /// 3. For the spots still unreached, FindPerches collects, once per tree rather than once per spot, the higher spots
 ///    the spider can jump up to from a ground start that are within one jump of one of those spots; then one jump
 ///    from each perch is tried.
@@ -81,7 +81,7 @@ public static class HammockReachFinder
 
     /// <summary>
     /// Sets Reachable and Jumps on every candidate. floorBox is the hammock's collision box relative to its cell
-    /// corner (its thin floor), spiderBox the spider's collision box relative to its feet.
+    /// corner (the slab a spider stands on; its top is the floor height), spiderBox the spider's collision box relative to its feet.
     /// First every candidate is tried with one jump from a ground start. Only if some are left, and
     /// limits.MaxPlannedJumps is at least 2, are perches searched (FindPerches) and tried; longer routes are never tried.
     /// </summary>

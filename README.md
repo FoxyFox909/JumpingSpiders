@@ -133,11 +133,15 @@ Use creative mode, `/time set` to move between day and night, and `/jspider info
 9. Hit a wild spider: it attacks you, and only you.
 10. Break the hammock of a sleeping wild spider: it wakes and attacks you. Break it while the spider is away:
     nothing happens.
-11. At dusk a wild spider returns to its own hammock and sleeps at once. At dawn it leaves.
+11. At dusk a wild spider returns to its own hammock and sleeps at once, lying in the cradle (on the base in a
+    floor hammock) and looking out of the opening. At dawn it leaves.
 12. Bait a reed basket trap with raw meat near a wild spider: it gets caught about half the time.
 
 **Hammock block**
-13. Place a hammock on a wall, a floor and a ceiling. Break the block holding it: the hammock breaks too.
+13. Place a hammock on each of the four sides of a block, on a floor and under a ceiling. On a wall the back of
+    the hammock is against the wall and it opens away from it; under a ceiling and on the floor it opens to the
+    west, and the floor one is the same model upside down (a tent over a base). Break the block holding it: the
+    hammock breaks too.
 14. Break hammocks by hand and with shears: 2 to 4 flax twine each time, and shears are about five times faster.
 
 **Taming and breeding**
@@ -194,8 +198,7 @@ or change the paths in the entity, block and item JSON.
 |---|---|
 | `shapes/entity/land/jumpingspider/male.json` | The real adult male model, with `walk`, `run`, `jumpwindup` and `jump`. Its texture is `textures/male.png`, still being painted |
 | `shapes/entity/land/jumpingspider/female.json`, `baby.json` | Placeholders. Texture code `skin` |
-| `shapes/block/silkhammock-wall.json` | Drawn against the south side of its cell; the JSON rotates it |
-| `shapes/block/silkhammock-floor.json`, `silkhammock-ceiling.json` | Texture codes `silk`, `strand` |
+| `shapes/block/silkhammock-wall.json` | The one hammock model for all six variants. Back panel on the east (+X) side, opening to the west (-X); the block JSON turns it to each wall and turns it upside down for the floor. Texture code `silk`; the cradle's untextured faces (`#null`) are mapped to the same placeholder linen in the block JSON until they get a texture |
 
 Animations each spider shape needs, with these exact lowercase codes:
 
@@ -215,9 +218,18 @@ The male model has its own texture, `textures/male.png` (96 x 96 pixels for the 
 VS Model Creator names a texture's code after its file, so the faces use `#male`, and the entity JSON and
 `itemtypes/creature.json` map `male` to `jumpingspiders:male`. If the file is renamed or moved, change both.
 
-The collision box is set per variant in the entity JSON (`hitboxSizeByType`): 0.8 wide and 0.4 high for the adult
-male, to fit its model, and 0.8 by 0.6 for the adult female. The jump planner uses it, so change it there if a
-model ends up a very different size. `eyeHeightByType` next to it must stay inside the box.
+The collision box is set in the entity JSON (`hitboxSize`): 0.8 wide and 0.4 high for both adults, to fit the
+male's model (the female will get the same proportions), and 0.4 by 0.3 for the baby. The jump planner uses it,
+so change it there if a model ends up a very different size. It must stay at most 0.4375 high: a spider sleeping
+in a wall or ceiling hammock stands 9/16 above the bottom of the cell, and the block above a ceiling hammock is
+solid. `eyeHeight` next to it must stay inside the box.
+
+Where a sleeping spider's feet are is `sleepFeetHeight` in the block JSON: 9/16 above the bottom of the cell for
+walls and the ceiling (the cradle's bottom) and 1/16 for the floor (its base). A spider lands on the hammock's
+collision box: for walls a slab up to the cradle's bottom, for the floor the base. Under a ceiling there is too
+little room to jump into the cradle, so the ceiling hammock has a thin floor at the bottom of its cell; the spider
+lands there and is lifted into the cradle as it falls asleep (and put back down when it wakes). If the model's
+cradle moves, change `sleepFeetHeight` and the wall slab to match.
 
 ## Not in this version
 
