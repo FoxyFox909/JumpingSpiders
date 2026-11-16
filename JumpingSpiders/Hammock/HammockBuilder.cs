@@ -190,7 +190,6 @@ public static class HammockBuilder
         {
             return sites;
         }
-        double floorTop = anyVariant.GetFloorTop();
 
         int feetX = JumpPlanner.CellOfX(spider.Pos.X);
         int feetY = JumpPlanner.CellOfFeetY(spider.Pos.Y);
@@ -235,10 +234,12 @@ public static class HammockBuilder
                 {
                     continue;
                 }
+                // The floor height depends on the variant (a floor hammock's base is lower than a wall hammock's cradle).
+                BlockSilkHammock variant = BlockSilkHammock.GetVariant(world, facing);
                 HammockSite site = new HammockSite();
                 site.Pos = pos;
                 site.SupportFacing = facing;
-                site.FeetY = y + floorTop;
+                site.FeetY = y + variant.GetFloorTop();
                 sites.Add(site);
             }
         }
@@ -252,7 +253,7 @@ public static class HammockBuilder
         Cuboidf floor = BoundsOf(variant.CollisionBoxes);
         if (floor == null)
         {
-            // A hammock without a floor (if the JSON ever drops it) gives nothing to stand on.
+            // A hammock without a collision box (if the JSON ever drops it) gives nothing to stand on.
             return false;
         }
         Cuboidf box = spider.CollisionBox;

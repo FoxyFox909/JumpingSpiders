@@ -22,6 +22,11 @@ namespace JumpingSpiders;
 /// - OnNeighbourBlockChange when a block next to it changes (breaks the hammock when its support is gone).
 /// - OnGettingBroken on the client while a player is breaking it (shears break it faster).
 /// Drops (2 to 4 flax twine) come from the "drops" list in the JSON.
+///
+/// Where a spider stands: on the collision box from the JSON (GetFloorTop). Where it sleeps: at
+/// GetSleepFeetHeight, the "sleepFeetHeight" attribute. For walls and the floor the two are the same. For the ceiling
+/// the collision box is a thin floor (a jump cannot get into the cradle under a solid block, see the JSON), so the
+/// sleep task lifts the spider into the cradle and holds it there while it sleeps (LiftsSleeper).
 /// </summary>
 public class BlockSilkHammock : Block
 {
@@ -40,11 +45,18 @@ public class BlockSilkHammock : Block
     /// <summary>Block JSON attribute: break speed multiplier when the player holds shears.</summary>
     public const string ShearsSpeedAttribute = "shearsBreakSpeedMultiplier";
 
+    /// <summary>Block JSON attribute: feet height of a sleeping spider above the bottom of the cell, in blocks.</summary>
+    public const string SleepFeetHeightAttribute = "sleepFeetHeight";
+
+    /// <summary>A sleep height this much above the collision box's top or more makes the hammock lift its sleeper.</summary>
+    public const double LiftEpsilon = 0.001;
+
     /// <summary>Failure code shown when there is nothing to attach to. Vanilla has the text for it ("placefailure-requireattachable").</summary>
     public const string NoSupportFailureCode = "requireattachable";
 
     private BlockFacing supportFacing;
     private float shearsSpeedMultiplier = 1;
+    private double sleepFeetHeight;
 
     /// <summary>True when the block is any silk hammock variant.</summary>
     public static bool IsHammock(Block block)
@@ -87,6 +99,12 @@ public class BlockSilkHammock : Block
         {
             shearsSpeedMultiplier = Attributes[ShearsSpeedAttribute].AsFloat(1);
         }
+        double floorTop = GetFloorTop();
+        sleepFeetHeight = floorTop;
+        if (Attributes != null)
+        {
+            sleepFeetHeight = Attributes[SleepFeetHeightAttribute].AsDouble(floorTop);
+        }
     }
 
     /// <summary>Direction from the hammock to the block that holds it.</summary>
@@ -106,8 +124,10 @@ public class BlockSilkHammock : Block
     }
 
     /// <summary>
-    /// Height of the hammock's floor above the bottom of its cell, in blocks: the top of its collision box.
-    /// A spider resting in the hammock has its feet at this height.
+    /// Height of the hammock's floor above the bottom of its cell, in blocks: the top of its collision box in the
+    /// JSON, where a spider landing in the hammock stands. Each variant has its own box: 9/16 (the cradle's bottom)
+    /// for wall hammocks, 1/16 for the ceiling hammock (a landing floor under the cradle) and the floor hammock (its
+    /// base). Where it sleeps is GetSleepFeetHeight.
     /// </summary>
     public double GetFloorTop()
     {
@@ -124,6 +144,37 @@ public class BlockSilkHammock : Block
             }
         }
         return top;
+    }
+
+    /// <summary>
+    /// Feet height of a sleeping spider above the bottom of the cell, in blocks: 9/16 (the cradle's bottom) for wall
+    /// and ceiling hammocks, 1/16 (the base) for the floor hammock.
+    /// </summary>
+    public double GetSleepFeetHeight()
+    {
+        return sleepFeetHeight;
+    }
+
+    /// <summary>
+    /// True when a spider lands lower than it sleeps in this variant (the ceiling hammock): falling asleep lifts it
+    /// into the cradle, where nothing holds it up, so the sleep task holds it still until it wakes.
+    /// </summary>
+    public bool LiftsSleeper()
+    {
+        return sleepFeetHeight > GetFloorTop() + LiftEpsilon;
+    }
+
+    /// <summary>
+    /// The yaw (radians, the game's convention: 0 looks towards +Z) of a spider sleeping in this variant: out through
+    /// the opening, away from the wall for wall hammocks, west for ceiling and floor hammocks (see HammockFacing).
+    /// </summary>
+    public float GetSleepYaw()
+    {
+        if (supportFacing == null)
+        {
+            return 0;
+        }
+        return (float)HammockFacing.SleepYaw(supportFacing.Normali.X, supportFacing.Normali.Y, supportFacing.Normali.Z);
     }
 
     /// <summary>

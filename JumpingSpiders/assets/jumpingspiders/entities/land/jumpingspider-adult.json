@@ -16,20 +16,15 @@
 		{ code: "age", states: ["adult"] },
 		{ code: "gender", states: ["male", "female"] }
 	],
-	// Collision and selection box in blocks. Must fit in one block cell next to a wall so the spider can rest in a
-	// hammock: at most 0.95 wide and about 0.8 tall. The model may be larger than this.
-	// "ByType" picks a value per variant: the key is matched against the entity code, "*" is the fallback.
-	// The male has its real model, about 0.4 blocks tall. The female still uses the placeholder box model.
-	hitboxSizeByType: {
-		"*-male": { x: 0.8, y: 0.4 },
-		"*": { x: 0.8, y: 0.6 }
-	},
+	// Collision and selection box in blocks. Must fit inside a hammock's cell: at most 0.95 wide, and at most
+	// 0.4375 tall, because a spider sleeping in a wall or ceiling hammock stands 9/16 above the bottom of the cell and
+	// the block above a ceiling hammock is solid. The model may be larger than this.
+	// Both sexes use the size of the male's real model, about 0.4 blocks tall (the female still has the placeholder
+	// box model, which is taller than this box).
+	hitboxSize: { x: 0.8, y: 0.4 },
 	deadHitboxSize: { x: 0.8, y: 0.3 },
 	// Height of the eyes above the feet, used for line-of-sight checks. Must be inside the hitbox.
-	eyeHeightByType: {
-		"*-male": 0.3,
-		"*": 0.45
-	},
+	eyeHeight: 0.3,
 	// 0 = no fall damage at all (jumps go up to 6 blocks down). This also lets the vanilla pathfinder plan drops.
 	fallDamageMultiplier: 0,
 	// The jump model was measured with default physics: do not add attributes.physics here.
