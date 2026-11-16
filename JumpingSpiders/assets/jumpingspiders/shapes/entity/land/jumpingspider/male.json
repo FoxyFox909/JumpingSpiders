@@ -611,7 +611,7 @@
 			"code": "run",
 			"quantityframes": 60,
 			"onActivityStopped": "EaseOut",
-			"onAnimationEnd": "EaseOut",
+			"onAnimationEnd": "Repeat",
 			"keyframes": [
 				{
 					"frame": 0,
@@ -826,6 +826,7 @@
 					}
 				}
 			]
-		}
+		},
+
 	]
 }
