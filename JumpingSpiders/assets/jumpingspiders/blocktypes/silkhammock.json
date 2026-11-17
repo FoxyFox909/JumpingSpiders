@@ -24,13 +24,13 @@
 		// Breaking with shears is this many times faster than by hand or with any other tool (BlockSilkHammock.OnGettingBroken).
 		shearsBreakSpeedMultiplier: 5,
 		// Blocks above the bottom of the cell: where a sleeping spider's feet are (BlockSilkHammock.GetSleepFeetHeight).
-		// Walls and ceiling: the cradle's inner bottom (y 9 of the model). Floor: on the base (y 1 of the model, turned
+		// Walls and ceiling: the cradle's inner bottom (y 7.2 of the model, 0.45 blocks). Floor: on the base (y 1 of the model, turned
 		// upside down). Where this is above the collision box's top (the ceiling), the spider is lifted up here as it
 		// falls asleep; see collisionboxByType below.
 		sleepFeetHeightByType: {
 			"*-down": 0.0625,
 			"*-down-*": 0.0625,
-			"*": 0.5625
+			"*": 0.45
 		}
 	},
 	// Only the original floor variant appears in the creative inventory; placing it picks the variant from the clicked
@@ -86,13 +86,13 @@
 	emitSideAo: { all: false },
 	// What a spider lands on. The jump planner (SpiderJumpWorld) and the game's physics both use these boxes.
 	// Only these boxes collide: the roof, back panel and cradle sides are drawn but can be passed through.
-	// - Walls: a solid slab from the bottom of the cell up to the cradle's inner bottom (9/16), so a spider jumps
+	// - Walls: a solid slab from the bottom of the cell up to the cradle's inner bottom (0.45), so a spider jumps
 	//   straight into the cradle and sleeps where it lands. Solid all the way down so that nothing can walk in
 	//   under the cradle. The cell above a wall hammock is usually open, so the jump can come in from above; under
-	//   another block it cannot be jumped into (the same 7/16 gap as below), so spiders never build one there
+	//   another block it cannot be jumped into (the same 0.55 gap as below), so spiders never build one there
 	//   (HammockBuilder.ChooseBuildFacing skips it) and wild ones get one only where the jump planner finds a way in.
 	// - Ceiling: a thin floor at the bottom of the cell. With the slab, the block holding the hammock would leave
-	//   only 7/16 of head room above it, and no jump arc can enter a gap that low (a 0.4 high spider would have to
+	//   only 0.55 of head room above it, and no jump arc can enter a gap that low (a 0.4 high spider would have to
 	//   fly in level). So the spider lands on this floor, under the cradle, and the sleep task lifts it into the
 	//   cradle (to sleepFeetHeight) when it falls asleep and holds it there with its physics paused. It is put back
 	//   down on this floor when it wakes, and jumps out from there.
@@ -105,24 +105,24 @@
 		"*-up-*": { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.0625, z2: 1 },
 		"*-down": { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.0625, z2: 1 },
 		"*-down-*": { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.0625, z2: 1 },
-		"*": { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.5625, z2: 1 }
+		"*": { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.45, z2: 1 }
 	},
 	// What the player's cursor hits: the outline of the model, turned like the shape above. In the model's own frame
-	// it spans x 2..16, y 7..16, z 1..15 (1/16 units). A ceiling hammock's box is that of the wall hammock turned the
-	// same way; a floor hammock's is its upside-down copy (y 0..9).
+	// it spans about x 2..16, y 6..16, z 1..15 (1/16 units). A ceiling hammock's box is that of the wall hammock turned the
+	// same way; a floor hammock's is its upside-down copy (y 0..10).
 	selectionboxByType: {
-		"*-up-north": { x1: 0.0625, y1: 0.4375, z1: 0.125, x2: 0.9375, y2: 1, z2: 1 },
-		"*-up-east": { x1: 0, y1: 0.4375, z1: 0.0625, x2: 0.875, y2: 1, z2: 0.9375 },
-		"*-up-south": { x1: 0.0625, y1: 0.4375, z1: 0, x2: 0.9375, y2: 1, z2: 0.875 },
-		"*-down-north": { x1: 0.0625, y1: 0, z1: 0.125, x2: 0.9375, y2: 0.5625, z2: 1 },
-		"*-down-east": { x1: 0, y1: 0, z1: 0.0625, x2: 0.875, y2: 0.5625, z2: 0.9375 },
-		"*-down-south": { x1: 0.0625, y1: 0, z1: 0, x2: 0.9375, y2: 0.5625, z2: 0.875 },
-		"*-east": { x1: 0.125, y1: 0.4375, z1: 0.0625, x2: 1, y2: 1, z2: 0.9375 },
-		"*-north": { x1: 0.0625, y1: 0.4375, z1: 0, x2: 0.9375, y2: 1, z2: 0.875 },
-		"*-west": { x1: 0, y1: 0.4375, z1: 0.0625, x2: 0.875, y2: 1, z2: 0.9375 },
-		"*-south": { x1: 0.0625, y1: 0.4375, z1: 0.125, x2: 0.9375, y2: 1, z2: 1 },
-		"*-up": { x1: 0.125, y1: 0.4375, z1: 0.0625, x2: 1, y2: 1, z2: 0.9375 },
-		"*-down": { x1: 0.125, y1: 0, z1: 0.0625, x2: 1, y2: 0.5625, z2: 0.9375 }
+		"*-up-north": { x1: 0.0625, y1: 0.375, z1: 0.125, x2: 0.9375, y2: 1, z2: 1 },
+		"*-up-east": { x1: 0, y1: 0.375, z1: 0.0625, x2: 0.875, y2: 1, z2: 0.9375 },
+		"*-up-south": { x1: 0.0625, y1: 0.375, z1: 0, x2: 0.9375, y2: 1, z2: 0.875 },
+		"*-down-north": { x1: 0.0625, y1: 0, z1: 0.125, x2: 0.9375, y2: 0.625, z2: 1 },
+		"*-down-east": { x1: 0, y1: 0, z1: 0.0625, x2: 0.875, y2: 0.625, z2: 0.9375 },
+		"*-down-south": { x1: 0.0625, y1: 0, z1: 0, x2: 0.9375, y2: 0.625, z2: 0.875 },
+		"*-east": { x1: 0.125, y1: 0.375, z1: 0.0625, x2: 1, y2: 1, z2: 0.9375 },
+		"*-north": { x1: 0.0625, y1: 0.375, z1: 0, x2: 0.9375, y2: 1, z2: 0.875 },
+		"*-west": { x1: 0, y1: 0.375, z1: 0.0625, x2: 0.875, y2: 1, z2: 0.9375 },
+		"*-south": { x1: 0.0625, y1: 0.375, z1: 0.125, x2: 0.9375, y2: 1, z2: 1 },
+		"*-up": { x1: 0.125, y1: 0.375, z1: 0.0625, x2: 1, y2: 1, z2: 0.9375 },
+		"*-down": { x1: 0.125, y1: 0, z1: 0.0625, x2: 1, y2: 0.625, z2: 0.9375 }
 	},
 	// What breaking it gives: 4 to 6 flax twine (4: 25 %, 5: 50 %, 6: 25 %).
 	drops: [

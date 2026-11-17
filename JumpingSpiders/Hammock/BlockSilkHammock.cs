@@ -246,7 +246,7 @@ public class BlockSilkHammock : Block
 
     /// <summary>
     /// Height of the hammock's floor above the bottom of its cell, in blocks: the top of its collision box in the
-    /// JSON, where a spider landing in the hammock stands. Each variant has its own box: 9/16 (the cradle's bottom)
+    /// JSON, where a spider landing in the hammock stands. Each variant has its own box: 0.45 (the cradle's bottom)
     /// for wall hammocks, 1/16 for the ceiling hammock (a landing floor under the cradle) and the floor hammock (its
     /// base). Where it sleeps is GetSleepFeetHeight.
     /// </summary>
@@ -268,7 +268,7 @@ public class BlockSilkHammock : Block
     }
 
     /// <summary>
-    /// Feet height of a sleeping spider above the bottom of the cell, in blocks: 9/16 (the cradle's bottom) for wall
+    /// Feet height of a sleeping spider above the bottom of the cell, in blocks: 0.45 (the cradle's bottom) for wall
     /// and ceiling hammocks, 1/16 (the base) for the floor hammock.
     /// </summary>
     public double GetSleepFeetHeight()
