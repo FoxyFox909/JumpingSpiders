@@ -825,28 +825,29 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
     /// <summary>
     /// Starts an attempt now, ignoring the hourly timer, the hunger and whether a hammock is owed (for /jspider build).
     /// Picks the spot and checks the spacing right away (a bounded number of block lookups), then hands over to the
-    /// task, which interrupts whatever the spider is doing unless it is in the air. Returns what happened so far;
-    /// when the result comes later, it is sent to reportTo (or the server log for the console).
+    /// task, which interrupts whatever the spider is doing unless it is in the air. Returns what happened so far, worded
+    /// to follow "Spider id N " (it starts with a verb). When the result comes later, it is sent to reportTo (or the
+    /// server log for the console).
     /// </summary>
     public string StartForcedAttempt(IServerPlayer caller)
     {
         EntityBehaviorTaskAI taskAi = entity.GetBehavior<EntityBehaviorTaskAI>();
         if (taskAi == null)
         {
-            return "it has no AI.";
+            return "has no AI, so it cannot build.";
         }
         IAiTask active = taskAi.TaskManager.ActiveTasksBySlot[Slot];
         if (active == this)
         {
-            return "it is already in the middle of an attempt (" + Phase + ").";
+            return "is already in the middle of an attempt (" + Phase + ").";
         }
         if (active != null && active.PriorityForCancel >= SpiderTaskUtil.InFlightPriorityForCancel)
         {
-            return "it is in the air; try again in a moment.";
+            return "is in the air; try again in a moment.";
         }
         if (!entity.OnGround || entity.Swimming)
         {
-            return "it is not standing on the ground; try again in a moment.";
+            return "is not standing on the ground; try again in a moment.";
         }
 
         Stopwatch commandWatch = Stopwatch.StartNew();
