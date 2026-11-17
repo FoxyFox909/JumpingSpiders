@@ -48,13 +48,16 @@
 		"*-up": { base: "jumpingspiders:block/silkhammock-wall" },
 		"*-down": { base: "jumpingspiders:block/silkhammock-wall", rotateX: 180 }
 	},
-	// Keys are the texture codes used on the model's faces. Placeholders from the vanilla game.
+	// Keys are the texture codes used on the model's faces. VS Model Creator names a texture code after its file:
+	// every face uses "#silk_hammock", which is assets/jumpingspiders/textures/silk_hammock.png. If the file is
+	// renamed or moved, change this to match.
 	textures: {
-		silk: { base: "game:block/cloth/linen/normal1" },
-		// "null" is what VS Model Creator writes on faces that have no texture yet (the cradle panels). Mapping it here
-		// draws them with the placeholder linen too. Remove this line once every face of the model has a real texture.
-		"null": { base: "game:block/cloth/linen/normal1" }
+		"silk_hammock": { base: "jumpingspiders:silk_hammock" }
 	},
+	// How the game draws the block's texture. The default ("Opaque") only cuts out fully transparent pixels and
+	// draws every other pixel solid, whatever its alpha. "Transparent" blends half-transparent pixels with what is
+	// behind them, which the silk texture needs; vanilla's spider web and glass use it too.
+	renderpass: "Transparent",
 	// Cloth: no vanilla tool has a mining speed for it, so only the shears bonus above makes a difference.
 	blockmaterial: "Cloth",
 	// Seconds to break by hand.

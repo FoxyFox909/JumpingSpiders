@@ -38,8 +38,8 @@ def inline(v):
     if isinstance(v, dict):
         parts = []
         for k, x in v.items():
-            if k == "windMode":
-                # the editor writes a face's windMode without spaces: [-1,-1,-1,-1]
+            if k in ("windMode", "windData"):
+                # the editor writes a face's wind values without spaces: [-1,-1,-1,-1]
                 parts.append(json.dumps(k) + ": [" + ",".join(num(n) for n in x) + "]")
             else:
                 parts.append(json.dumps(k) + ": " + inline(x))
