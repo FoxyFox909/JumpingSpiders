@@ -24,13 +24,14 @@
 		// Breaking with shears is this many times faster than by hand or with any other tool (BlockSilkHammock.OnGettingBroken).
 		shearsBreakSpeedMultiplier: 5,
 		// Blocks above the bottom of the cell: where a sleeping spider's feet are (BlockSilkHammock.GetSleepFeetHeight).
-		// Walls and ceiling: the cradle's inner bottom (y 7.2 of the model, 0.45 blocks). Floor: on the base (y 1 of the model, turned
+		// Walls and ceiling: 9/16 of a block. That is a little above the cradle's inner bottom (y 7.2 of the model, 0.45
+		// blocks) on purpose: the gap is room for the spider's legs, which would poke through the silk otherwise. Floor: on the base (y 1 of the model, turned
 		// upside down). Where this is above the collision box's top (the ceiling), the spider is lifted up here as it
 		// falls asleep; see collisionboxByType below.
 		sleepFeetHeightByType: {
 			"*-down": 0.0625,
 			"*-down-*": 0.0625,
-			"*": 0.45
+			"*": 0.5625
 		}
 	},
 	// Only the original floor variant appears in the creative inventory; placing it picks the variant from the clicked
@@ -86,13 +87,13 @@
 	emitSideAo: { all: false },
 	// What a spider lands on. The jump planner (SpiderJumpWorld) and the game's physics both use these boxes.
 	// Only these boxes collide: the roof, back panel and cradle sides are drawn but can be passed through.
-	// - Walls: a solid slab from the bottom of the cell up to the cradle's inner bottom (0.45), so a spider jumps
+	// - Walls: a solid slab from the bottom of the cell up to where a spider sleeps (9/16, see sleepFeetHeight), so a spider jumps
 	//   straight into the cradle and sleeps where it lands. Solid all the way down so that nothing can walk in
 	//   under the cradle. The cell above a wall hammock is usually open, so the jump can come in from above; under
-	//   another block it cannot be jumped into (the same 0.55 gap as below), so spiders never build one there
+	//   another block it cannot be jumped into (the same 7/16 gap as below), so spiders never build one there
 	//   (HammockBuilder.ChooseBuildFacing skips it) and wild ones get one only where the jump planner finds a way in.
 	// - Ceiling: a thin floor at the bottom of the cell. With the slab, the block holding the hammock would leave
-	//   only 0.55 of head room above it, and no jump arc can enter a gap that low (a 0.4 high spider would have to
+	//   only 7/16 of head room above it, and no jump arc can enter a gap that low (a 0.4 high spider would have to
 	//   fly in level). So the spider lands on this floor, under the cradle, and the sleep task lifts it into the
 	//   cradle (to sleepFeetHeight) when it falls asleep and holds it there with its physics paused. It is put back
 	//   down on this floor when it wakes, and jumps out from there.
@@ -105,7 +106,7 @@
 		"*-up-*": { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.0625, z2: 1 },
 		"*-down": { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.0625, z2: 1 },
 		"*-down-*": { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.0625, z2: 1 },
-		"*": { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.45, z2: 1 }
+		"*": { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.5625, z2: 1 }
 	},
 	// What the player's cursor hits: the outline of the model, turned like the shape above. In the model's own frame
 	// it spans about x 2..16, y 6..16, z 1..15 (1/16 units). A ceiling hammock's box is that of the wall hammock turned the

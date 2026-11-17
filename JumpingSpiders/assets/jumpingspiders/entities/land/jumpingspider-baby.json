@@ -65,7 +65,8 @@
 			// See the adult file: wild babies despawn, babies the player caught or bred never do.
 			{ code: "despawn", minPlayerDistance: 32, minSeconds: 600 },
 			{ code: "health", currenthealth: 3, maxhealth: 3 },
-			{ code: "deaddecay", hoursToDecay: 48, decayedBlock: "game:carcass-tiny" },
+			// No "decayedBlock": a dead spiderling leaves no bone pile behind (see the adult file).
+			{ code: "deaddecay", hoursToDecay: 48 },
 			{ code: "floatupwhenstuck", onlyWhenDead: true },
 			{ code: "harvestable", drops: [] },
 			{ code: "breathe" },
