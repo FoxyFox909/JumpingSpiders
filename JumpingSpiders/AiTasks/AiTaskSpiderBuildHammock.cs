@@ -33,6 +33,9 @@ namespace JumpingSpiders;
 ///    tick); else walk (the game's pathfinder) to a spot to stand on, or to a spot from which such a jump works. Every
 ///    jump has a wind-up. A jump at a wall or ceiling ends with the spider holding on there as soon as it touches a
 ///    surface within reach: its physics is paused (as in a ceiling hammock, see AiTaskSpiderSleep) until it has built.
+///    Every spot is right against the site (BuildStanceFinder), so the spider usually lands or arrives a little short of
+///    it: within maxSidleDistance it sidles the rest of the way along the floor, and a spider that got hold of the wall
+///    or ceiling it jumped at within maxCrawlDistance of its spot crawls there (sidleSpeed, physics still paused).
 ///    It gives up after maxApproachRounds rounds, maxWalks walks or approachTimeoutMs.
 /// 4. Build: stand (or hang) still for buildTimeMs, check the spacing again, place the hammock
 ///    (HammockBuilder.PlaceHammock), let go. Spiders take no fall damage, so a clinging spider simply drops.
@@ -51,7 +54,7 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
     /// <summary>The pathfinder stops walking this close to the goal, in blocks.</summary>
     public const float WalkStopDistance = 0.3f;
 
-    /// <summary>A spider standing within reach builds only when its box stays this far (sideways) out of the site's cell.</summary>
+    /// <summary>A spider within reach builds only when its box stays at least this far (sideways) out of the site's cell.</summary>
     public const double StandingBuildSiteMargin = 0.02;
 
     /// <summary>Launch spots for a cling jump are looked for at most this far below the spider's feet, in blocks.</summary>
@@ -70,6 +73,9 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
     private readonly int maxApproachRounds;
     private readonly int approachTimeoutMs;
     private readonly int buildTimeMs;
+    private readonly float sidleSpeed;
+    private readonly float maxSidleDistance;
+    private readonly float maxCrawlDistance;
     private readonly float moveSpeed;
     private readonly float turnSpeedRadPerSec;
     private readonly string walkAnimation;
@@ -104,6 +110,7 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
     private int nextIndex;
     private BuildStance clingTarget;
     private BuildStance walkTarget;
+    private BuildStance sidleTarget;
     private bool held;
     private string heldOn = "";
     private bool walking;
@@ -150,6 +157,12 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
         approachTimeoutMs = taskConfig["approachTimeoutMs"].AsInt(20000);
         // Milliseconds: how long building takes, standing or holding on to a wall or ceiling.
         buildTimeMs = taskConfig["buildTimeMs"].AsInt(1500);
+        // Blocks per second: how fast it sidles along the floor, or crawls along a wall or ceiling, onto its exact spot.
+        sidleSpeed = taskConfig["sidleSpeed"].AsFloat(1.5f);
+        // Blocks: it sidles onto a standing spot this close (on the same floor), and crawls onto a clinging spot this
+        // close to where it got hold of the wall or ceiling; farther off it jumps or walks.
+        maxSidleDistance = taskConfig["maxSidleDistance"].AsFloat(0.8f);
+        maxCrawlDistance = taskConfig["maxCrawlDistance"].AsFloat(1.0f);
         // Walking speed (vanilla movespeed units).
         moveSpeed = taskConfig["movespeed"].AsFloat(0.02f);
         // Degrees per second: how fast it turns towards the site while building, and towards a jump while winding up.
@@ -227,6 +240,7 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
         launchSpotsFor = null;
         clingTarget = null;
         walkTarget = null;
+        sidleTarget = null;
         held = false;
         walking = false;
         outcome = null;
@@ -330,6 +344,10 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
         {
             StepWalking();
         }
+        else if (Phase == BuildPhase.Sidling)
+        {
+            StepSidling(dt);
+        }
         else if (Phase == BuildPhase.Building || Phase == BuildPhase.Clinging)
         {
             StepBuilding(dt, now);
@@ -390,6 +408,16 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
             JumpingSpidersModSystem.Config.HammockBuildRange, HalfWidth(), BodyHeight(), entity.Pos.X, entity.Pos.Y, entity.Pos.Z);
         clinging = null;
         nextIndex = 0;
+        // Landed or arrived a little short of a spot on the same floor: sidle onto it.
+        for (int i = 0; i < standing.Count; i++)
+        {
+            BuildStance stance = standing[i];
+            if (Math.Abs(stance.FeetY - entity.Pos.Y) < 0.05 && HorizontalDistance(stance.FeetX, stance.FeetZ) <= maxSidleDistance)
+            {
+                StartSidling(stance, false);
+                return;
+            }
+        }
         if (standing.Count > 0 && planSearches < maxPlanSearches)
         {
             Phase = BuildPhase.Planning;
@@ -575,6 +603,70 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
         }
     }
 
+    // Moves the spider straight towards sidleTarget, sidleSpeed blocks per second, as long as its box fits on the way.
+    private void StepSidling(float dt)
+    {
+        double dx = sidleTarget.FeetX - entity.Pos.X;
+        double dy = sidleTarget.FeetY - entity.Pos.Y;
+        double dz = sidleTarget.FeetZ - entity.Pos.Z;
+        double distance = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+        double step = sidleSpeed * dt;
+        bool arrived = distance <= step;
+        double moveX = sidleTarget.FeetX;
+        double moveY = sidleTarget.FeetY;
+        double moveZ = sidleTarget.FeetZ;
+        if (!arrived)
+        {
+            moveX = entity.Pos.X + dx * step / distance;
+            moveY = entity.Pos.Y + dy * step / distance;
+            moveZ = entity.Pos.Z + dz * step / distance;
+        }
+        bool blocked = !jumpWorld.IsFree(moveX, moveY, moveZ);
+        if (!blocked)
+        {
+            entity.Pos.X = moveX;
+            entity.Pos.Y = moveY;
+            entity.Pos.Z = moveZ;
+            entity.Pos.Motion.Set(0, 0, 0);
+        }
+        if (!held)
+        {
+            SpiderTaskUtil.StopWalking(entity);
+        }
+        if (!arrived && !blocked)
+        {
+            return;
+        }
+        bool inReach = InReachAt(entity.Pos.X, entity.Pos.Y, entity.Pos.Z);
+        if (held)
+        {
+            if (inReach)
+            {
+                StartClingBuilding();
+            }
+            else
+            {
+                Fail("could not crawl within reach along " + heldOn);
+            }
+            return;
+        }
+        if (inReach && entity.OnGround)
+        {
+            StartBuilding();
+            return;
+        }
+        // Something in the way: decide again from here (this counts as a round).
+        Phase = BuildPhase.FindingStances;
+    }
+
+    private void StartSidling(BuildStance target, bool holding)
+    {
+        sidleTarget = target;
+        Phase = BuildPhase.Sidling;
+        SpiderTaskUtil.Log(entity, LogName, (holding ? "crawls" : "sidles") + " " + HorizontalDistance(target.FeetX, target.FeetZ).ToString("0.00")
+            + " blocks onto its spot at " + SpiderTaskUtil.Format(target.FeetX, target.FeetY, target.FeetZ));
+    }
+
     // ---- 4: build ----
 
     private void StepBuilding(float dt, long now)
@@ -659,27 +751,33 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
         {
             return false;
         }
-        if (!BuildReach.IsWithinReach(entity.Pos.X, entity.Pos.Y, entity.Pos.Z, BodyHeight(), Site.Pos.X, Site.Pos.Y, Site.Pos.Z,
-            JumpingSpidersModSystem.Config.HammockBuildRange + BuildStanceFinder.SurfaceProbe))
+        double dx = clingTarget.FeetX - entity.Pos.X;
+        double dy = clingTarget.FeetY - entity.Pos.Y;
+        double dz = clingTarget.FeetZ - entity.Pos.Z;
+        bool nearAimedSpot = dx * dx + dy * dy + dz * dz <= (maxCrawlDistance + BuildStanceFinder.SurfaceProbe) * (maxCrawlDistance + BuildStanceFinder.SurfaceProbe);
+        bool nearSite = BuildReach.IsWithinReach(entity.Pos.X, entity.Pos.Y, entity.Pos.Z, BodyHeight(), Site.Pos.X, Site.Pos.Y, Site.Pos.Z,
+            JumpingSpidersModSystem.Config.HammockBuildRange + BuildStanceFinder.SurfaceProbe);
+        if (!nearAimedSpot && !nearSite)
         {
             return false;
         }
-        if (TryHoldTowards(clingTarget.SurfaceX, clingTarget.SurfaceY, clingTarget.SurfaceZ))
+        // The surface it aimed at, anywhere it can crawl onto its spot from.
+        if (nearAimedSpot && TryHoldTowards(clingTarget.SurfaceX, clingTarget.SurfaceY, clingTarget.SurfaceZ, true))
         {
             return true;
         }
-        if (!clingTarget.IsCeiling() && TryHoldTowards(0, 1, 0))
-        {
-            return true;
-        }
-        if (TryHoldTowards(1, 0, 0) || TryHoldTowards(-1, 0, 0) || TryHoldTowards(0, 0, 1) || TryHoldTowards(0, 0, -1))
+        // Or any surface right where it can build.
+        if (TryHoldTowards(0, 1, 0, false) || TryHoldTowards(1, 0, 0, false) || TryHoldTowards(-1, 0, 0, false)
+            || TryHoldTowards(0, 0, 1, false) || TryHoldTowards(0, 0, -1, false))
         {
             return true;
         }
         return false;
     }
 
-    private bool TryHoldTowards(int dirX, int dirY, int dirZ)
+    // aimed: the surface of the clinging spot it jumped at; it holds on within maxCrawlDistance of the spot and crawls
+    // there. Otherwise it only holds on where it can build at once.
+    private bool TryHoldTowards(int dirX, int dirY, int dirZ, bool aimed)
     {
         double holdX;
         double holdY;
@@ -689,15 +787,22 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
         {
             return false;
         }
-        if (!BuildReach.CanReach(jumpWorld, holdX, holdY, holdZ, BodyHeight(), Site.Pos.X, Site.Pos.Y, Site.Pos.Z,
-            JumpingSpidersModSystem.Config.HammockBuildRange))
+        bool inReach = InReachAt(holdX, holdY, holdZ);
+        bool crawl = false;
+        if (!inReach)
         {
-            return false;
-        }
-        if (BuildReach.BoxOverlapsCell(holdX, holdY, holdZ, HalfWidth(), BodyHeight(), BuildStanceFinder.ClingingSiteMargin,
-            Site.Pos.X, Site.Pos.Y, Site.Pos.Z))
-        {
-            return false;
+            if (!aimed)
+            {
+                return false;
+            }
+            double cx = clingTarget.FeetX - holdX;
+            double cy = clingTarget.FeetY - holdY;
+            double cz = clingTarget.FeetZ - holdZ;
+            if (cx * cx + cy * cy + cz * cz > maxCrawlDistance * maxCrawlDistance)
+            {
+                return false;
+            }
+            crawl = true;
         }
         runner.Stop();
         held = true;
@@ -710,12 +815,22 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
         {
             heldOn = "the ceiling";
         }
+        SpiderTaskUtil.Log(entity, LogName, "holds on to " + heldOn + " at " + SpiderTaskUtil.Format(holdX, holdY, holdZ));
+        if (crawl)
+        {
+            StartSidling(clingTarget, true);
+            return true;
+        }
+        StartClingBuilding();
+        return true;
+    }
+
+    private void StartClingBuilding()
+    {
         Phase = BuildPhase.Clinging;
         buildDoneMs = entity.World.ElapsedMilliseconds + buildTimeMs;
         SpiderTaskUtil.StartAnimation(entity, buildAnimation);
-        SpiderTaskUtil.Log(entity, LogName, "holds on to " + heldOn + " at " + SpiderTaskUtil.Format(holdX, holdY, holdZ)
-            + " and builds");
-        return true;
+        SpiderTaskUtil.Log(entity, LogName, "builds holding on to " + heldOn + " at " + SpiderTaskUtil.Format(entity.Pos.X, entity.Pos.Y, entity.Pos.Z));
     }
 
     private void StartWalk(BuildStance target, string why)
@@ -905,9 +1020,14 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
         {
             return false;
         }
-        double range = JumpingSpidersModSystem.Config.HammockBuildRange;
-        if (BuildReach.BoxOverlapsCell(entity.Pos.X, entity.Pos.Y, entity.Pos.Z, HalfWidth(), BodyHeight(),
-            StandingBuildSiteMargin, Site.Pos.X, Site.Pos.Y, Site.Pos.Z))
+        return InReachAt(entity.Pos.X, entity.Pos.Y, entity.Pos.Z);
+    }
+
+    // Could a spider with its feet here build at the site: within reach, a clear line, and not in the hammock's way.
+    private bool InReachAt(double feetX, double feetY, double feetZ)
+    {
+        if (BuildReach.BoxOverlapsCell(feetX, feetY, feetZ, HalfWidth(), BodyHeight(), StandingBuildSiteMargin,
+            Site.Pos.X, Site.Pos.Y, Site.Pos.Z))
         {
             return false;
         }
@@ -915,7 +1035,15 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
         {
             jumpWorld = new SpiderJumpWorld(entity);
         }
-        return BuildReach.CanReach(jumpWorld, entity.Pos.X, entity.Pos.Y, entity.Pos.Z, BodyHeight(), Site.Pos.X, Site.Pos.Y, Site.Pos.Z, range);
+        return BuildReach.CanReach(jumpWorld, feetX, feetY, feetZ, BodyHeight(), Site.Pos.X, Site.Pos.Y, Site.Pos.Z,
+            JumpingSpidersModSystem.Config.HammockBuildRange);
+    }
+
+    private double HorizontalDistance(double x, double z)
+    {
+        double dx = x - entity.Pos.X;
+        double dz = z - entity.Pos.Z;
+        return Math.Sqrt(dx * dx + dz * dz);
     }
 
     private BlockEntitySilkHammock FindHammockTooClose(BlockPos pos)

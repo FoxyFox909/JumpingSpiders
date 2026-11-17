@@ -39,9 +39,8 @@ public class BuildStanceFinderTests
         List<BuildStance> stances = BuildStanceFinder.FindStanding(world, world, 2, 0, 0, Range, HalfWidth, Height, -3.5, 0, 0.5);
         Assert.NotEmpty(stances);
         Assert.True(Contains(stances, 0, 0, 0));
+        Assert.True(Contains(stances, 1, 0, 0));
         Assert.False(Contains(stances, 2, 0, 0));
-        // Right next to the site the pathfinder would often leave it standing in the way.
-        Assert.False(Contains(stances, 1, 0, 0));
         for (int i = 0; i < stances.Count; i++)
         {
             BuildStance s = stances[i];
@@ -108,6 +107,42 @@ public class BuildStanceFinderTests
         {
             Assert.True(clinging[i].CellX < 3);
         }
+    }
+
+    [Fact]
+    public void SpotsSitRightAgainstTheSite()
+    {
+        Assert.Equal(1.55, BuildStanceFinder.FeetTowards(1, 2, HalfWidth), 9);
+        Assert.Equal(3.45, BuildStanceFinder.FeetTowards(3, 2, HalfWidth), 9);
+        Assert.Equal(2.5, BuildStanceFinder.FeetTowards(2, 2, HalfWidth), 9);
+        Assert.Equal(1.55, BuildStanceFinder.FeetHeightTowards(1, 2, Height), 9);
+        Assert.Equal(3.05, BuildStanceFinder.FeetHeightTowards(3, 2, Height), 9);
+    }
+
+    [Fact]
+    public void HalfABlockReachStillLeavesAWayToEveryKindOfSpot()
+    {
+        TestBlockWorld world = FloorAndWall();
+        world.Fill(-3, 4, -3, 2, 4, 3);
+        // Floor spot: standing right beside it, on the four sides only.
+        List<BuildStance> floor = BuildStanceFinder.FindStanding(world, world, 0, 0, 0, 0.5, HalfWidth, Height, -2.5, 0, 0.5);
+        Assert.Equal(4, floor.Count);
+        // Wall spot one block up: no standing spot, but holding on to the wall right below or beside it.
+        Assert.Empty(BuildStanceFinder.FindStanding(world, world, 2, 1, -2, 0.5, HalfWidth, Height, -2.5, 0, 0.5));
+        List<BuildStance> wall = BuildStanceFinder.FindClinging(world, world, 2, 1, -2, 0.5, HalfWidth, Height, -2.5, 0, 0.5);
+        Assert.NotEmpty(wall);
+        // Under the ceiling, three blocks up: holding on to the ceiling beside it.
+        List<BuildStance> ceiling = BuildStanceFinder.FindClinging(world, world, 0, 3, 0, 0.5, HalfWidth, Height, -2.5, 0, 0.5);
+        bool underCeiling = false;
+        for (int i = 0; i < ceiling.Count; i++)
+        {
+            if (ceiling[i].IsCeiling())
+            {
+                underCeiling = true;
+                Assert.True(BuildReach.IsWithinReach(ceiling[i].FeetX, ceiling[i].FeetY, ceiling[i].FeetZ, Height, 0, 3, 0, 0.5));
+            }
+        }
+        Assert.True(underCeiling);
     }
 
     [Fact]

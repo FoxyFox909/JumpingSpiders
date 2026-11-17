@@ -7,9 +7,10 @@ namespace JumpingSpiders;
 /// tests.
 ///
 /// A spider is within reach of a cell when the straight-line distance from the centre of its body (the middle of its
-/// collision box) to the nearest point of the cell is at most Config.HammockBuildRange blocks. So a spider standing on
-/// the floor reaches a cell two blocks above the floor (the cell's bottom is 2 - 0.2 = 1.8 blocks from its body), and a
-/// spider holding on to the wall right beside or below the cell always does.
+/// collision box) to the nearest point of the cell is at most Config.HammockBuildRange blocks. With the default of 0.5
+/// the spider must be right against the cell: standing on the floor beside a cell at floor level (its body is then
+/// 0.45 from the cell), or holding on to the wall or ceiling right beside or below a higher one (0.45 or 0.25). With a
+/// range of 2 a spider standing on the floor would reach a cell two blocks up (1.8 from its body).
 ///
 /// The straight line from its body to the cell must also be clear (IsLineClear): no building through a floor or a
 /// wall. And the spider must not be inside the cell, or the game refuses to place the block there (an entity is in the

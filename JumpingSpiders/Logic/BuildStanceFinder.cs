@@ -28,14 +28,12 @@ public static class BuildStanceFinder
     public const double SurfaceProbe = 0.1;
 
     /// <summary>
-    /// A standing spot is only used when the spider's box, grown by this many blocks sideways, stays out of the site's
-    /// cell. The pathfinder stops a little short of its goal (0.3 blocks), so a spot right next to the site would often
-    /// leave the spider standing in the way of the new hammock.
+    /// How far the spider's box keeps out of the site's cell, in blocks. Every spot puts the spider as close to the
+    /// site as its cell and this margin allow (FeetTowards): with a build range of 0.5 the middle of the spider's body
+    /// must come within half a block of the cell, which only a spot right against it manages. The spider gets onto the
+    /// exact spot with a short sidle or crawl (AiTaskSpiderBuildHammock).
     /// </summary>
-    public const double StandingSiteMargin = 0.3;
-
-    /// <summary>A clinging spider's box must keep this far (sideways) out of the site's cell, in blocks.</summary>
-    public const double ClingingSiteMargin = 0.02;
+    public const double SiteMargin = 0.05;
 
     /// <summary>Launch spots for a jump to a clinging spot are at least this far from it horizontally, in blocks (no jumps straight up).</summary>
     public const double MinLaunchDistance = 1.0;
@@ -73,10 +71,16 @@ public static class BuildStanceFinder
                     {
                         continue;
                     }
-                    double feetX = x + 0.5;
                     double feetY = world.GetStandHeight(x, y, z);
-                    double feetZ = z + 0.5;
-                    if (BuildReach.BoxOverlapsCell(feetX, feetY, feetZ, halfWidth, height, StandingSiteMargin, siteX, siteY, siteZ))
+                    double feetX = FeetTowards(x, siteX, halfWidth);
+                    double feetZ = FeetTowards(z, siteZ, halfWidth);
+                    if (!world.IsFree(feetX, feetY, feetZ))
+                    {
+                        // Something in the way near the edge of the cell (a fence post, say): the middle of the cell.
+                        feetX = x + 0.5;
+                        feetZ = z + 0.5;
+                    }
+                    if (BuildReach.BoxOverlapsCell(feetX, feetY, feetZ, halfWidth, height, 0, siteX, siteY, siteZ))
                     {
                         continue;
                     }
@@ -183,14 +187,51 @@ public static class BuildStanceFinder
         return result;
     }
 
-    /// <summary>Feet position of a spider holding on in cell (x, y, z) to the surface in direction (dirX, dirY, dirZ).</summary>
-    public static void ClingFeet(int x, int y, int z, int dirX, int dirY, int dirZ, double halfWidth, double height,
-        out double feetX, out double feetY, out double feetZ)
+    /// <summary>
+    /// The feet coordinate on one axis that puts a spider in cell number cell as close to a site at site as the cell
+    /// allows, keeping its box SiteMargin out of the site's cell: against the side of the cell facing the site, or the
+    /// middle of the cell when the site is level with it on this axis. halfWidth is half the box's width.
+    /// </summary>
+    public static double FeetTowards(int cell, int site, double halfWidth)
     {
-        feetX = x + 0.5;
-        feetZ = z + 0.5;
-        // On a wall: in the middle of the cell's height.
-        feetY = y + (1 - height) / 2;
+        if (site > cell)
+        {
+            return cell + 1 - halfWidth - SiteMargin;
+        }
+        if (site < cell)
+        {
+            return cell + halfWidth + SiteMargin;
+        }
+        return cell + 0.5;
+    }
+
+    /// <summary>
+    /// The same for the height of a box height tall in cell number cell: at the top of the cell when the site is
+    /// above, at the bottom when it is below, in the middle when level.
+    /// </summary>
+    public static double FeetHeightTowards(int cell, int site, double height)
+    {
+        if (site > cell)
+        {
+            return cell + 1 - height - SiteMargin;
+        }
+        if (site < cell)
+        {
+            return cell + SiteMargin;
+        }
+        return cell + (1 - height) / 2;
+    }
+
+    /// <summary>
+    /// Feet position of a spider holding on in cell (x, y, z) to the surface in direction (dirX, dirY, dirZ), as close
+    /// to the site (siteX, siteY, siteZ) as the cell allows along the surface.
+    /// </summary>
+    public static void ClingFeet(int x, int y, int z, int dirX, int dirY, int dirZ, int siteX, int siteY, int siteZ,
+        double halfWidth, double height, out double feetX, out double feetY, out double feetZ)
+    {
+        feetX = FeetTowards(x, siteX, halfWidth);
+        feetZ = FeetTowards(z, siteZ, halfWidth);
+        feetY = FeetHeightTowards(y, siteY, height);
         if (dirX > 0)
         {
             feetX = x + 1 - halfWidth - ClingGap;
@@ -221,12 +262,12 @@ public static class BuildStanceFinder
         double feetX;
         double feetY;
         double feetZ;
-        ClingFeet(x, y, z, dirX, dirY, dirZ, halfWidth, height, out feetX, out feetY, out feetZ);
+        ClingFeet(x, y, z, dirX, dirY, dirZ, siteX, siteY, siteZ, halfWidth, height, out feetX, out feetY, out feetZ);
         if (!BuildReach.IsWithinReach(feetX, feetY, feetZ, height, siteX, siteY, siteZ, range))
         {
             return null;
         }
-        if (BuildReach.BoxOverlapsCell(feetX, feetY, feetZ, halfWidth, height, ClingingSiteMargin, siteX, siteY, siteZ))
+        if (BuildReach.BoxOverlapsCell(feetX, feetY, feetZ, halfWidth, height, 0, siteX, siteY, siteZ))
         {
             return null;
         }

@@ -61,7 +61,8 @@ get added), so edit or delete the file to get new defaults.
 This version reworked hammock building: it removed `HammockHeightBias`, `HammockBuildSamples` and
 `HammockBuildMaxPlanAttempts`, changed `HammockSpacing` (4 to 3), `HammockBuildSearchRadius` (8 to 6),
 `HammockBuildSearchUp` (8 to 5) and `HammockBuildSearchDown` (3 to 2), and added `HammockBuildIntervalHours` and
-`HammockBuildRange`. It changed `CuriosityStayUpHoursMax` (3 to 1.8) and added the nap knobs `NapSlotHours`,
+`HammockBuildRange`. `HammockBuildRange` has since changed from 2 to 0.5: a `jumpingspiders.json` written by the
+version before keeps 2 (spiders then build from farther off), so set it to 0.5 there or delete the file. It changed `CuriosityStayUpHoursMax` (3 to 1.8) and added the nap knobs `NapSlotHours`,
 `NapChanceMax`, `NapMinMinutes` and `NapMaxMinutes`.
 
 Per-task knobs are in the entity JSON (`assets/jumpingspiders/entities/land/jumpingspider-adult.json` and
@@ -81,8 +82,10 @@ Per-task knobs are in the entity JSON (`assets/jumpingspiders/entities/land/jump
 | Daytime naps | `NapSlotHours`, `NapChanceMax`, `NapMinMinutes`, `NapMaxMinutes` | one roll per 2-hour slot, chance 0.3 for the least curious falling to 0 for the most curious, 30 to 60 in-game minutes |
 | Hours a spider stays sated after a kill | `SatedHoursAfterKill` | 12 |
 | One hammock per this many blocks cubed | `HammockSpacing` | 3 |
-| Hammock building: how often, how close the spider must be, where it picks | `HammockBuildIntervalHours`, `HammockBuildRange`, `HammockBuildSearchRadius`, `HammockBuildSearchUp`, `HammockBuildSearchDown` | one attempt per in-game hour, 2 blocks, within 6 blocks, 5 up to 2 down |
+| Hammock building: how often, how close the spider must be, where it picks | `HammockBuildIntervalHours`, `HammockBuildRange`, `HammockBuildSearchRadius`, `HammockBuildSearchUp`, `HammockBuildSearchDown` | one attempt per in-game hour, 0.5 blocks, within 6 blocks, 5 up to 2 down |
 | How one build attempt is spread over ticks, and how long building takes | `pickTriesPerTick`, `maxPlanSearches`, `clingChecksPerTick`, `approachTimeoutMs`, `buildTimeMs` on the `jumpingspiders.buildhammock` task | 40 cells, 2 planner searches, 4 jump tests, 20 s, 1.5 s |
+| The last bit onto the building spot | `sidleSpeed`, `maxSidleDistance`, `maxCrawlDistance` on the `jumpingspiders.buildhammock` task | 1.5 blocks per second, sidles up to 0.8 blocks, crawls up to 1 block |
+| Flax twine from a broken hammock | `drops` in `blocktypes/silkhammock.json` | 4 to 6 |
 | How strongly wild hammock sites on trunks favour height | `WildHammockHeightBias` | 2 |
 | Share of chunks that are spider chunks | `SpiderChunkFraction` | 0.04 |
 | Chance a wild spider comes with a hammock | `WildHammockChance` | 0.75 |
@@ -146,10 +149,12 @@ Use creative mode, `/time set` to move between day and night, and `/jspider info
 
 **Hammock block**
 13. Place a hammock on each of the four sides of a block, on a floor and under a ceiling. On a wall the back of
-    the hammock is against the wall and it opens away from it; under a ceiling and on the floor it opens to the
-    west, and the floor one is the same model upside down (a tent over a base). Break the block holding it: the
-    hammock breaks too.
-14. Break hammocks by hand and with shears: 2 to 4 flax twine each time, and shears are about five times faster.
+    the hammock is against the wall and it opens away from it; under a ceiling and on the floor it opens towards
+    you, or to another side when a wall is right in front of that side (it is placed anyway when all four sides
+    are walled in), and the floor one is the same model upside down (a tent over a base). Place one under a
+    ceiling and one on the floor from each of the four sides: check that each opens where it should, and that
+    its outline (what the cursor highlights) matches the model. Break the block holding it: the hammock breaks too.
+14. Break hammocks by hand and with shears: 4 to 6 flax twine each time, and shears are about five times faster.
 
 **Taming and breeding**
 15. Release a trapped male and female into a pen with farm-born chickens or hares (generation 1 or more).
@@ -161,9 +166,10 @@ Use creative mode, `/time set` to move between day and night, and `/jspider info
     (`/jspider info` shows whether one is owed and when the next attempt comes). No two hammocks closer than one
     per 3x3x3 blocks; they sleep in a free one at night.
 19. Watch an attempt with `/jspider build` (break the hammock and repeat to see the spread): the spider picks a
-    spot it can see within 6 blocks, at any height, then gets within 2 blocks of it: it builds standing where it
-    is, or hops or walks closer, or jumps at the wall or ceiling next to the spot, holds on there for a moment
-    while it builds, and drops. A spot too close to another hammock, or one it cannot get to, fails, and the next
+    spot it can see within 6 blocks, at any height, then gets right next to it (within half a block): it builds
+    standing beside it, after a hop or a walk and a short sidle, or jumps at the wall or ceiling next to the spot,
+    holds on there (crawling the last bit if it landed a little off), builds for a moment, and drops. Hammocks
+    spiders build on the floor or under a ceiling open towards a side that is not walled in. A spot too close to another hammock, or one it cannot get to, fails, and the next
     try comes an hour later. Look for jitter while it holds on, and whether the server hitches.
 20. At dusk, domesticated spiders stay up for a while before they go to bed: up to 1.8 in-game hours for a very
     curious one, about 20 minutes for the least curious (`/jspider info` shows today's curiosity and how long).
@@ -204,12 +210,17 @@ Please also keep an eye on server performance with many spiders, and on spiders 
   that it can see, every one equally likely whatever its height (in a pen with walls 5 high about 4 in 10 end up at
   floor level and the rest spread over the four wall heights, simply because the floor has the most such cells; under a
   roof many hang from the ceiling). If another hammock is too close (one per 3x3x3), the
-  attempt fails. Otherwise the spider must get within 2 blocks of the spot (from the middle of its body to the
-  nearest point of the cell, with nothing solid in between), standing, after a hop or a walk, or holding on to the
-  wall or ceiling next to it after a jump; from the floor that reaches spots up to 5 blocks up. If it cannot get
-  there within 20 seconds, the attempt fails. A failed attempt waits for the next hour. In tests in walled pens,
-  about 98 attempts in 100 that passed the spacing rule built a hammock, two thirds standing, the rest holding on to
-  a wall or under the roof. As a pen fills up, more attempts fail on the spacing rule.
+  attempt fails. Otherwise the spider must get within half a block of the spot (`HammockBuildRange`, from the middle
+  of its body to the nearest point of the cell, with nothing solid in between): standing on the floor right beside
+  a spot at floor level, or holding on to the wall or ceiling right beside or below a higher spot after a jump; from
+  the floor that reaches spots up to 4 blocks up. It sidles or crawls the last few tenths of a block onto the exact
+  spot. If it cannot get there within 20 seconds, the attempt fails. A failed attempt waits for the next hour. In
+  tests in walled pens about 98 attempts in 100 that passed the spacing rule built a hammock (open pens: four in ten
+  standing, the rest holding on to a wall; roofed pens: four in ten standing, the rest holding on to a wall or under
+  the roof). As a pen fills up, more attempts fail on the spacing rule.
+- Floor and ceiling hammocks open towards one of the four sides: towards the player who places one (or the next
+  side that is not walled in), towards a random free side when a spider builds one. Wall hammocks open away from
+  their wall.
 - Spiders nap by day: once per 2-hour slot (shifted per spider by a random amount each day) a spider rolls for a
   nap with a chance of `NapChanceMax` (0.3) times how far its curiosity for the day is below the maximum, so the
   least curious nap about twice a day and the most curious never. A nap lasts 30 to 60 in-game minutes in a
@@ -226,7 +237,7 @@ or change the paths in the entity, block and item JSON.
 |---|---|
 | `shapes/entity/land/jumpingspider/male.json` | The real adult male model, with `walk`, `run`, `jumpwindup` and `jump`. Its texture is `textures/male.png`, still being painted |
 | `shapes/entity/land/jumpingspider/female.json`, `baby.json` | Placeholders. Texture code `skin` |
-| `shapes/block/silkhammock-wall.json` | The one hammock model for all six variants. Back panel on the east (+X) side, opening to the west (-X); the block JSON turns it to each wall and turns it upside down for the floor. Texture code `silk`; the cradle's untextured faces (`#null`) are mapped to the same placeholder linen in the block JSON until they get a texture |
+| `shapes/block/silkhammock-wall.json` | The one hammock model for all twelve variants. Back panel on the east (+X) side, opening to the west (-X); the block JSON turns it to each wall, to each opening direction under a ceiling, and upside down and to each opening direction on the floor. Texture code `silk`; the cradle's untextured faces (`#null`) are mapped to the same placeholder linen in the block JSON until they get a texture |
 
 Animations each spider shape needs, with these exact lowercase codes:
 

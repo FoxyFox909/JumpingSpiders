@@ -1,18 +1,24 @@
 {
 	// The silk hammock jumping spiders sleep in. C# side: Hammock/BlockSilkHammock.cs and Hammock/BlockEntitySilkHammock.cs.
 	//
-	// Variants are named by the direction from the hammock to the block that holds it:
-	//   silkhammock-north / -east / -south / -west   on a wall or tree trunk on that side
-	//   silkhammock-up                               hanging under a ceiling or branch
-	//   silkhammock-down                             lying on the ground or a block
-	// All six use the one model, shapes/block/silkhammock-wall.json, turned per variant (see shapeByType).
-	// The C# code reads the direction from the "side" variant group and builds codes as "silkhammock-<side>", so keep
-	// "side" the only variant group (or update BlockSilkHammock.GetVariant when adding one).
+	// Variants are named by the direction from the hammock to the block that holds it, and for ceiling and floor
+	// hammocks by the direction their opening faces:
+	//   silkhammock-north / -east / -south / -west   on a wall or tree trunk on that side; opens away from it
+	//   silkhammock-up, -up-north, -up-east, -up-south            hanging under a ceiling or branch
+	//   silkhammock-down, -down-north, -down-east, -down-south    lying on the ground or a block
+	// Plain "up" and "down" open west: they are the original two variants, and placed hammocks in existing worlds are
+	// stored under those codes, so they keep them; only the three other openings got new states. "up-north" is one
+	// state of the one "side" group (a hyphen inside a state is fine), so no existing code changed.
+	// Careful with wildcards in the *ByType lists below: "*-north" also matches silkhammock-up-north and
+	// silkhammock-down-north, and the game uses the first key that matches, so the up-/down- keys come first.
+	// All twelve use the one model, shapes/block/silkhammock-wall.json, turned per variant (see shapeByType).
+	// The C# code reads the support and the opening from the "side" state (BlockSilkHammock.ReadSideState) and builds
+	// codes with BlockSilkHammock.SideState, so keep "side" the only variant group (or update both when adding one).
 	code: "silkhammock",
 	class: "jumpingspiders.BlockSilkHammock",
 	entityClass: "jumpingspiders.SilkHammock",
 	variantgroups: [
-		{ code: "side", states: ["north", "east", "south", "west", "up", "down"] }
+		{ code: "side", states: ["north", "east", "south", "west", "up", "down", "up-north", "up-east", "up-south", "down-north", "down-east", "down-south"] }
 	],
 	attributes: {
 		// Breaking with shears is this many times faster than by hand or with any other tool (BlockSilkHammock.OnGettingBroken).
@@ -23,10 +29,12 @@
 		// falls asleep; see collisionboxByType below.
 		sleepFeetHeightByType: {
 			"*-down": 0.0625,
+			"*-down-*": 0.0625,
 			"*": 0.5625
 		}
 	},
-	// Only the floor variant appears in the creative inventory; placing it picks the variant from the clicked face.
+	// Only the original floor variant appears in the creative inventory; placing it picks the variant from the clicked
+	// face (and, on a floor or under a ceiling, from where the player stands). "*-down" matches no other variant.
 	creativeinventory: { "general": ["*-down"] },
 	drawtype: "JSON",
 	// The model, in its own frame (1/16 block units): a roof slab at the top of the cell (y 15..16), a back panel
@@ -35,12 +43,21 @@
 	// rotateY/rotateX turn the whole model around the centre of the cell (ShapeTesselator in the game client).
 	// rotateY 90 takes east to north (+X to -Z), so the back panel ends up against the supporting wall:
 	//   east 0, north 90, west 180, south 270; the opening points away from the wall.
-	// Ceiling: unrotated, the roof slab under the support, opening west.
-	// Floor: rotateX 180 turns it upside down (y and z flip, x stays), so the roof slab becomes a base on the ground,
-	// the cradle a tent over it, and the opening still faces west. A rotation, not a mirror, so the faces stay the
-	// right way out. Vanilla does the same for ceiling coatings (saltpeter-u).
+	// Ceiling: upright, the roof slab under the support, turned like the wall variant whose wall is opposite the
+	// opening: opening west 0, south 90, east 180, north 270.
+	// Floor: rotateX 180 turns it upside down (y and z flip, x stays), so the roof slab becomes a base on the ground
+	// and the cradle a tent over it. A rotation, not a mirror, so the faces stay the right way out. Vanilla does the
+	// same for ceiling coatings (saltpeter-u). The game turns around Y first and around X after (MeshData.Rotate uses
+	// Mat4f.RotateXYZ), and the flip around X swaps north and south, so for the floor: opening west 0, north 90,
+	// east 180, south 270. Logic/HammockOpening.ModelRotateY holds the same table (with a unit test).
 	// BlockSilkHammock.GetSleepYaw must agree with these: it turns a sleeping spider to face the opening.
 	shapeByType: {
+		"*-up-north": { base: "jumpingspiders:block/silkhammock-wall", rotateY: 270 },
+		"*-up-east": { base: "jumpingspiders:block/silkhammock-wall", rotateY: 180 },
+		"*-up-south": { base: "jumpingspiders:block/silkhammock-wall", rotateY: 90 },
+		"*-down-north": { base: "jumpingspiders:block/silkhammock-wall", rotateX: 180, rotateY: 90 },
+		"*-down-east": { base: "jumpingspiders:block/silkhammock-wall", rotateX: 180, rotateY: 180 },
+		"*-down-south": { base: "jumpingspiders:block/silkhammock-wall", rotateX: 180, rotateY: 270 },
 		"*-north": { base: "jumpingspiders:block/silkhammock-wall", rotateY: 90 },
 		"*-east": { base: "jumpingspiders:block/silkhammock-wall", rotateY: 0 },
 		"*-south": { base: "jumpingspiders:block/silkhammock-wall", rotateY: 270 },
@@ -85,12 +102,21 @@
 	// candidate's variant.
 	collisionboxByType: {
 		"*-up": { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.0625, z2: 1 },
+		"*-up-*": { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.0625, z2: 1 },
 		"*-down": { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.0625, z2: 1 },
+		"*-down-*": { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.0625, z2: 1 },
 		"*": { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.5625, z2: 1 }
 	},
 	// What the player's cursor hits: the outline of the model, turned like the shape above. In the model's own frame
-	// it spans x 2..16, y 7..16, z 1..15 (1/16 units).
+	// it spans x 2..16, y 7..16, z 1..15 (1/16 units). A ceiling hammock's box is that of the wall hammock turned the
+	// same way; a floor hammock's is its upside-down copy (y 0..9).
 	selectionboxByType: {
+		"*-up-north": { x1: 0.0625, y1: 0.4375, z1: 0.125, x2: 0.9375, y2: 1, z2: 1 },
+		"*-up-east": { x1: 0, y1: 0.4375, z1: 0.0625, x2: 0.875, y2: 1, z2: 0.9375 },
+		"*-up-south": { x1: 0.0625, y1: 0.4375, z1: 0, x2: 0.9375, y2: 1, z2: 0.875 },
+		"*-down-north": { x1: 0.0625, y1: 0, z1: 0.125, x2: 0.9375, y2: 0.5625, z2: 1 },
+		"*-down-east": { x1: 0, y1: 0, z1: 0.0625, x2: 0.875, y2: 0.5625, z2: 0.9375 },
+		"*-down-south": { x1: 0.0625, y1: 0, z1: 0, x2: 0.9375, y2: 0.5625, z2: 0.875 },
 		"*-east": { x1: 0.125, y1: 0.4375, z1: 0.0625, x2: 1, y2: 1, z2: 0.9375 },
 		"*-north": { x1: 0.0625, y1: 0.4375, z1: 0, x2: 0.9375, y2: 1, z2: 0.875 },
 		"*-west": { x1: 0, y1: 0.4375, z1: 0.0625, x2: 0.875, y2: 1, z2: 0.9375 },
@@ -98,9 +124,9 @@
 		"*-up": { x1: 0.125, y1: 0.4375, z1: 0.0625, x2: 1, y2: 1, z2: 0.9375 },
 		"*-down": { x1: 0.125, y1: 0, z1: 0.0625, x2: 1, y2: 0.5625, z2: 0.9375 }
 	},
-	// What breaking it gives: 2 to 4 flax twine (2: 25 %, 3: 50 %, 4: 25 %).
+	// What breaking it gives: 4 to 6 flax twine (4: 25 %, 5: 50 %, 6: 25 %).
 	drops: [
-		{ type: "item", code: "game:flaxtwine", quantity: { avg: 3, var: 1 } }
+		{ type: "item", code: "game:flaxtwine", quantity: { avg: 5, var: 1 } }
 	],
 	sounds: {
 		place: "game:block/cloth",

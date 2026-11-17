@@ -158,10 +158,12 @@ public class JumpingSpidersConfig
 
     /// <summary>
     /// A spider only builds when it is this close to the hammock's cell, in blocks: from the middle of its body to the
-    /// nearest point of the cell. From the floor that reaches a cell 2 blocks up; higher spots it reaches by jumping
-    /// onto a perch, or by jumping against the wall or ceiling next to the spot and holding on there while it builds.
+    /// nearest point of the cell, with nothing solid in between. At 0.5 it has to be right against the cell: standing
+    /// on the floor beside a floor or low wall spot, or holding on to the wall or ceiling right next to or under a
+    /// higher spot (it jumps there and holds on while it builds). It gets onto the exact spot with a short sidle or
+    /// crawl (the build task's maxSidleDistance and maxCrawlDistance).
     /// </summary>
-    public double HammockBuildRange = 2;
+    public double HammockBuildRange = 0.5;
 
     /// <summary>
     /// Horizontal radius, in blocks, around the spider in which a build attempt picks its spot. The spot is picked at
@@ -170,8 +172,9 @@ public class JumpingSpidersConfig
     public int HammockBuildSearchRadius = 6;
 
     /// <summary>
-    /// Highest spot picked, in blocks above the spider's feet. From the floor a spider reaches spots up to 5 blocks up
-    /// by holding on to a wall (a jump of MaxJumpUp = 4, plus the reach); higher picks only work from a perch.
+    /// Highest spot picked, in blocks above the spider's feet. From the floor a spider reaches spots up to 4 blocks up
+    /// by holding on to the wall right below them (a jump of MaxJumpUp = 4, plus the reach of HammockBuildRange);
+    /// higher picks only work from a perch, and otherwise just fail (rarely: they are seldom in sight from below).
     /// </summary>
     public int HammockBuildSearchUp = 5;
 

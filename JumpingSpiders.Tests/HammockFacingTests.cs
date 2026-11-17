@@ -23,6 +23,16 @@ public class HammockFacingTests
     }
 
     [Fact]
+    public void CeilingAndFloorHammocksFaceTheirOpening()
+    {
+        Assert.Equal(Math.PI, HammockFacing.SleepYaw(0, 1, 0, 0, -1), 9);          // ceiling, opening north
+        Assert.Equal(0.5 * Math.PI, HammockFacing.SleepYaw(0, -1, 0, 1, 0), 9);    // floor, opening east
+        Assert.Equal(0.0, HammockFacing.SleepYaw(0, -1, 0, 0, 1), 9);              // floor, opening south
+        // A wall hammock ignores the opening: away from its wall.
+        Assert.Equal(0.0, HammockFacing.SleepYaw(0, 0, -1, 1, 0), 9);
+    }
+
+    [Fact]
     public void TheYawPointsAlongTheLookDirection()
     {
         // The game's convention: x = sin(yaw), z = cos(yaw).

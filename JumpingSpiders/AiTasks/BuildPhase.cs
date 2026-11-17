@@ -39,6 +39,12 @@ public enum BuildPhase
     /// <summary>Walking (the game's pathfinder) to a spot.</summary>
     Walking,
 
+    /// <summary>
+    /// The last few tenths of a block onto the exact spot: a sidle along the floor, or a crawl along the wall or ceiling
+    /// it holds on to (physics paused).
+    /// </summary>
+    Sidling,
+
     /// <summary>Standing within reach, building (for buildTimeMs, from the task's JSON).</summary>
     Building,
 

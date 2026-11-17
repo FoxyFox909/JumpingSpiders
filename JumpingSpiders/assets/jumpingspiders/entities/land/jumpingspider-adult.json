@@ -334,7 +334,8 @@
 						// spider makes one attempt per in-game hour (Config.HammockBuildIntervalHours) until one succeeds.
 						// An attempt picks a random spot near the spider, fails if another hammock is too close, and
 						// otherwise gets within reach (Config.HammockBuildRange) by jumping, walking, or jumping at the wall
-						// or ceiling and holding on there while it builds. See AiTaskSpiderBuildHammock.
+						// or ceiling and holding on there while it builds, then sidles or crawls (blocks per second, blocks)
+						// the last bit onto its spot. See AiTaskSpiderBuildHammock.
 						// Priority 1.35: just above exploring (1.3), below getting out of water, the bait eat task, hunting,
 						// sleeping and fleeing, so it never pre-empts those.
 						code: "jumpingspiders.buildhammock",
@@ -352,6 +353,9 @@
 						maxApproachRounds: 5,
 						approachTimeoutMs: 20000,
 						buildTimeMs: 1500,
+						sidleSpeed: 1.5,
+						maxSidleDistance: 0.8,
+						maxCrawlDistance: 1.0,
 						movespeed: 0.02,
 						windUpMinMs: 350,
 						windUpMaxMs: 900,
