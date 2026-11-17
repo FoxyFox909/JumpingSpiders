@@ -42,6 +42,13 @@ public static class SpiderAttributes
     private const string KeptByPlayerKey = "keptByPlayer";
     private const string CreditedSaturationKey = "creditedSaturation";
     private const string DomesticatedFlagKey = "domesticated";
+    private const string BuildArmedKey = "buildArmed";
+    private const string NextBuildAttemptHoursKey = "nextBuildHours";
+    private const string NapShiftKey = "napShift";
+    private const string NapShiftDayKey = "napShiftDay";
+    private const string NapRollDayKey = "napRollDay";
+    private const string NapRollSlotKey = "napRollSlot";
+    private const string NapUntilHoursKey = "napUntilHours";
 
     /// <summary>The vanilla breeding generation attribute (top level of WatchedAttributes).</summary>
     public const string GenerationKey = "generation";
@@ -388,6 +395,144 @@ public static class SpiderAttributes
         SunHeightAt sun = new SunHeightAt(calendar, entity.Pos.XYZ);
         return StayUpAfterDusk.IsStayingUp(sun, calendar.TotalDays, calendar.HoursPerDay, hours,
             JumpingSpidersModSystem.Config.CuriosityStayUpMaxNightShare);
+    }
+
+    // ---------------- Hammock building (domesticated adults) ----------------
+
+    /// <summary>
+    /// True while a domesticated adult owes a hammock for a kill: set by the kill, cleared by the build attempt
+    /// that succeeds. AiTaskSpiderBuildHammock makes its hourly attempts while this is set and the spider is sated.
+    /// </summary>
+    public static bool IsHammockBuildArmed(Entity entity)
+    {
+        ITreeAttribute tree = GetTree(entity);
+        if (tree == null)
+        {
+            return false;
+        }
+        return tree.GetBool(BuildArmedKey, false);
+    }
+
+    public static void SetHammockBuildArmed(Entity entity, bool armed)
+    {
+        ITreeAttribute tree = GetOrCreateTree(entity);
+        tree.SetBool(BuildArmedKey, armed);
+        MarkDirty(entity);
+    }
+
+    /// <summary>In-game total hours at which the next hourly build attempt may start (0 when none was made yet).</summary>
+    public static double GetNextBuildAttemptHours(Entity entity)
+    {
+        ITreeAttribute tree = GetTree(entity);
+        if (tree == null)
+        {
+            return 0;
+        }
+        return tree.GetDouble(NextBuildAttemptHoursKey, 0);
+    }
+
+    public static void SetNextBuildAttemptHours(Entity entity, double totalHours)
+    {
+        ITreeAttribute tree = GetOrCreateTree(entity);
+        tree.SetDouble(NextBuildAttemptHoursKey, totalHours);
+        MarkDirty(entity);
+    }
+
+    // ---------------- Daytime naps ----------------
+
+    /// <summary>
+    /// How many in-game hours after midnight today's nap slots begin (0 up to Config.NapSlotHours), see NapSchedule.
+    /// Rolled on the first call of an in-game day. Call on the server: the roll is written to the entity.
+    /// </summary>
+    public static double GetNapShiftHours(Entity entity)
+    {
+        JumpingSpidersConfig config = JumpingSpidersModSystem.Config;
+        ITreeAttribute tree = GetOrCreateTree(entity);
+        int today = (int)Math.Floor(entity.World.Calendar.TotalDays);
+        if (tree.HasAttribute(NapShiftKey) && tree.GetInt(NapShiftDayKey, -1) == today)
+        {
+            return tree.GetDouble(NapShiftKey);
+        }
+        double shift = entity.World.Rand.NextDouble() * Math.Max(0, config.NapSlotHours);
+        tree.SetDouble(NapShiftKey, shift);
+        tree.SetInt(NapShiftDayKey, today);
+        MarkDirty(entity);
+        return shift;
+    }
+
+    /// <summary>The nap slot the spider is in now (see NapSchedule), and today's day number in day.</summary>
+    public static int GetNapSlot(Entity entity, out int day)
+    {
+        IGameCalendar calendar = entity.World.Calendar;
+        day = (int)Math.Floor(calendar.TotalDays);
+        double hourOfDay = NapSchedule.HourOfDay(calendar.TotalHours, calendar.HoursPerDay);
+        return NapSchedule.SlotIndex(hourOfDay, GetNapShiftHours(entity), JumpingSpidersModSystem.Config.NapSlotHours);
+    }
+
+    /// <summary>True when the spider has already rolled for a nap in this slot of this day.</summary>
+    public static bool HasRolledNap(Entity entity, int day, int slot)
+    {
+        ITreeAttribute tree = GetTree(entity);
+        if (tree == null)
+        {
+            return false;
+        }
+        return !NapSchedule.IsNewSlot(day, slot, tree.GetInt(NapRollDayKey, int.MinValue), tree.GetInt(NapRollSlotKey, int.MinValue));
+    }
+
+    /// <summary>Remembers that the spider rolled for a nap in this slot, so it does not roll again there (saved).</summary>
+    public static void MarkNapRolled(Entity entity, int day, int slot)
+    {
+        ITreeAttribute tree = GetOrCreateTree(entity);
+        tree.SetInt(NapRollDayKey, day);
+        tree.SetInt(NapRollSlotKey, slot);
+        MarkDirty(entity);
+    }
+
+    /// <summary>
+    /// This spider's chance (0..1) to nap in one slot today, from today's curiosity roll (NapSchedule.NapChance).
+    /// Call on the server: it may roll today's curiosity.
+    /// </summary>
+    public static double GetNapChance(Entity entity)
+    {
+        JumpingSpidersConfig config = JumpingSpidersModSystem.Config;
+        return NapSchedule.NapChance(GetDailyCuriosity(entity), config.CuriosityMin, config.CuriosityMax, config.NapChanceMax);
+    }
+
+    /// <summary>In-game total hours at which the nap the spider sleeps now ends, or 0 when it is not napping.</summary>
+    public static double GetNapUntilHours(Entity entity)
+    {
+        ITreeAttribute tree = GetTree(entity);
+        if (tree == null)
+        {
+            return 0;
+        }
+        return tree.GetDouble(NapUntilHoursKey, 0);
+    }
+
+    public static void SetNapUntilHours(Entity entity, double totalHours)
+    {
+        ITreeAttribute tree = GetOrCreateTree(entity);
+        tree.SetDouble(NapUntilHoursKey, totalHours);
+        MarkDirty(entity);
+    }
+
+    /// <summary>The nap is over (or became the night's sleep). Does nothing when there was none.</summary>
+    public static void ClearNap(Entity entity)
+    {
+        ITreeAttribute tree = GetTree(entity);
+        if (tree == null || !tree.HasAttribute(NapUntilHoursKey))
+        {
+            return;
+        }
+        tree.RemoveAttribute(NapUntilHoursKey);
+        MarkDirty(entity);
+    }
+
+    /// <summary>True while the spider sleeps a daytime nap (asleep, and the nap's end has not come).</summary>
+    public static bool IsNapping(Entity entity)
+    {
+        return IsSleeping(entity) && GetNapUntilHours(entity) > entity.World.Calendar.TotalHours;
     }
 
     // ---------------- Day and night ----------------

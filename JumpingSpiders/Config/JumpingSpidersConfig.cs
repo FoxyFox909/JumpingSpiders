@@ -86,10 +86,10 @@ public class JumpingSpidersConfig
 
     /// <summary>
     /// Domesticated spiders stay up after dusk for (today's curiosity roll times this) in-game hours before they go
-    /// to bed: at curiosity 1, 3 hours; at 0.2, 36 minutes. Meanwhile they explore (at the night curiosity) and hunt
-    /// when hungry. 0 = they go to bed at dusk, like wild spiders always do. A spider already asleep stays asleep.
+    /// to bed: at curiosity 1, 1.8 hours; at 0.2, about 22 minutes. Meanwhile they explore (at the night curiosity) and
+    /// hunt when hungry. 0 = they go to bed at dusk, like wild spiders always do. A spider already asleep stays asleep.
     /// </summary>
-    public double CuriosityStayUpHoursMax = 3;
+    public double CuriosityStayUpHoursMax = 1.8;
 
     /// <summary>
     /// Staying up after dusk never takes more than this share (0..1) of the night, so on short nights curious
@@ -97,41 +97,79 @@ public class JumpingSpidersConfig
     /// </summary>
     public double CuriosityStayUpMaxNightShare = 0.5;
 
+    // ---------------- Daytime naps ----------------
+
+    /// <summary>
+    /// By day a spider may take a nap in a hammock (never on the bare ground). The day is cut into slots this many
+    /// in-game hours long, shifted per spider by a random 0 to NapSlotHours rolled at the start of each in-game day, and
+    /// the spider rolls for a nap once per slot. Every spider that sleeps at night naps, wild ones in their home hammock.
+    /// </summary>
+    public double NapSlotHours = 2;
+
+    /// <summary>
+    /// The chance (0..1) per slot that the least curious spider naps. The chance falls in a straight line with the
+    /// day's curiosity roll c (CuriosityMin..CuriosityMax, without the night factor):
+    /// chance = NapChanceMax * (CuriosityMax - c) / (CuriosityMax - CuriosityMin).
+    /// With the defaults: curiosity 0.2 gives 0.3, 0.6 gives 0.15, 1.0 gives 0. A day has about six slots of daylight,
+    /// so the least curious spiders nap about twice a day, middling ones about once, the most curious never.
+    /// 0 = no naps at all.
+    /// </summary>
+    public double NapChanceMax = 0.3;
+
+    /// <summary>Shortest nap, in in-game minutes, counted from falling asleep in the hammock.</summary>
+    public double NapMinMinutes = 30;
+
+    /// <summary>Longest nap, in in-game minutes. A nap still going at dusk simply goes on as the night's sleep.</summary>
+    public double NapMaxMinutes = 60;
+
     // ---------------- Hammocks ----------------
 
-    /// <summary>At most one hammock per box of this many blocks on each side.</summary>
-    public int HammockSpacing = 4;
-
-    /// <summary>Horizontal radius, in blocks, around the spider in which build sites are sampled.</summary>
-    public int HammockBuildSearchRadius = 8;
+    /// <summary>
+    /// At most one hammock per box of this many blocks on each side, for every hammock whoever placed it: two hammocks
+    /// less than this many blocks apart on every axis at once are too close (see Logic/HammockSpacing.cs).
+    /// A build attempt whose randomly picked spot breaks this rule fails, and the spider tries again an hour later.
+    /// </summary>
+    public int HammockSpacing = 3;
 
     /// <summary>
-    /// How many random block columns around the spider are looked at per build attempt. Every cell of a sampled
-    /// column between HammockBuildSearchDown and HammockBuildSearchUp that can hold a hammock becomes a candidate.
-    /// Cheap (no jump planning). With too few, a lone post or tree beside the spider is often not looked at at all,
-    /// so the spider builds on the floor: 60 missed a post about one time in four, 150 hardly ever.
+    /// false: any kill by a domesticated adult earns it one hammock to build. true: only a valid meal does (a
+    /// farm-born chicken or hare, the same kills that count for breeding).
     /// </summary>
-    public int HammockBuildSamples = 150;
-
-    /// <summary>Highest build site looked at, in blocks above the spider's feet (two jumps of MaxJumpUp reach 8).</summary>
-    public int HammockBuildSearchUp = 8;
-
-    /// <summary>Lowest build site looked at, in blocks below the spider's feet.</summary>
-    public int HammockBuildSearchDown = 3;
+    public bool HammockNeedsFarmPrey = false;
 
     /// <summary>
-    /// How many candidate sites a build attempt checks with the jump planner before giving up. Each check is one
-    /// planner search, the expensive part, so this caps the cost of one attempt. In a walled pen the highest
-    /// candidates (wall tops, the outside of the wall) cannot be reached and use up checks: with 6 checks about one
-    /// build in five failed there, with 20 about one in twenty-five. Measured cost of a whole build attempt with 20:
-    /// 6 ms on average, under 40 ms at worst, once per meal.
+    /// A domesticated adult that earned a hammock with a kill makes one build attempt this many in-game hours apart
+    /// while it is sated, until one succeeds (then none until its next kill). The first comes as soon as it stands
+    /// on the ground after the kill. The time of the next attempt is saved with the spider.
     /// </summary>
-    public int HammockBuildMaxPlanAttempts = 20;
+    public double HammockBuildIntervalHours = 1;
+
+    /// <summary>
+    /// A spider only builds when it is this close to the hammock's cell, in blocks: from the middle of its body to the
+    /// nearest point of the cell. From the floor that reaches a cell 2 blocks up; higher spots it reaches by jumping
+    /// onto a perch, or by jumping against the wall or ceiling next to the spot and holding on there while it builds.
+    /// </summary>
+    public double HammockBuildRange = 2;
+
+    /// <summary>
+    /// Horizontal radius, in blocks, around the spider in which a build attempt picks its spot. The spot is picked at
+    /// random among all cells in this cylinder that could hold a hammock, every one equally likely, high or low.
+    /// </summary>
+    public int HammockBuildSearchRadius = 6;
+
+    /// <summary>
+    /// Highest spot picked, in blocks above the spider's feet. From the floor a spider reaches spots up to 5 blocks up
+    /// by holding on to a wall (a jump of MaxJumpUp = 4, plus the reach); higher picks only work from a perch.
+    /// </summary>
+    public int HammockBuildSearchUp = 5;
+
+    /// <summary>Lowest spot picked, in blocks below the spider's feet.</summary>
+    public int HammockBuildSearchDown = 2;
 
     /// <summary>
     /// Which supporting block a new hammock uses when a cell has several, best first, as directions from the hammock
     /// to its support: north, east, south, west (walls such as tree trunks), up (hanging under a branch or ceiling),
-    /// down (lying on the ground or a branch). Directions left out are never chosen by HammockBuilder.FindSupportFacing,
+    /// down (lying on the ground or a branch). Directions left out are never chosen by HammockBuilder.ChooseBuildFacing,
     /// which spiders use when they build. A player placing a hammock gets the face they click on, whatever this says.
     /// </summary>
     public string[] HammockSupportPreference = new string[] { "north", "east", "south", "west", "up", "down" };
@@ -141,14 +179,6 @@ public class JumpingSpidersConfig
     /// (a safety net in case a sleep task ends without releasing the hammock).
     /// </summary>
     public double HammockClaimMaxDistance = 32;
-
-    /// <summary>
-    /// Preference for high build sites: weight = (height above the lowest candidate + 1) ^ bias. With 4, a site
-    /// 3 blocks up weighs as much as 256 floor sites, so a few high spots beat a whole floor of low ones; with 2 it was
-    /// only 16, and on open ground beside a post half the hammocks ended up at floor level. Raising it further makes builds in
-    /// walled pens fail more often (the unreachable wall tops get picked first; see HammockBuildMaxPlanAttempts).
-    /// </summary>
-    public double HammockHeightBias = 4.0;
 
     /// <summary>How far, in blocks, a spider looks for a free hammock at night.</summary>
     public double HammockSleepSearchRange = 24;

@@ -57,6 +57,33 @@ public class HammockSpacingTests
     }
 
     [Fact]
+    public void SizeThreeRulesOutTwoBlocksOnEveryAxis()
+    {
+        // The default: one hammock per 3 x 3 x 3. Two apart on every axis still fit in one 3-cube together.
+        Assert.True(HammockSpacing.Conflicts(10, 70, 10, 12, 72, 12, 3));
+        Assert.True(HammockSpacing.Conflicts(10, 70, 10, 11, 70, 9, 3));
+        // Three apart on any one axis is fine.
+        Assert.False(HammockSpacing.Conflicts(10, 70, 10, 13, 70, 10, 3));
+        Assert.False(HammockSpacing.Conflicts(10, 70, 10, 12, 73, 12, 3));
+    }
+
+    [Fact]
+    public void NoTwoHammocksFitInAnyThreeCube()
+    {
+        for (int dx = 0; dx < 3; dx++)
+        {
+            for (int dy = 0; dy < 3; dy++)
+            {
+                for (int dz = 0; dz < 3; dz++)
+                {
+                    Assert.True(HammockSpacing.Conflicts(5, 5, 5, 5 + dx, 5 + dy, 5 + dz, 3));
+                }
+            }
+        }
+        Assert.Equal(2, HammockSpacing.ScanRadius(3));
+    }
+
+    [Fact]
     public void ScanRadius()
     {
         Assert.Equal(3, HammockSpacing.ScanRadius(4));

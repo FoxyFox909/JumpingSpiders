@@ -12,10 +12,11 @@ namespace JumpingSpiders;
 /// carry our mod id because the registry is shared by all mods.
 ///
 /// What the tasks share (all in this folder):
-/// - JumpRunner: does a planned chain of jumps (wind-up, flight, pause on the perch), used by all four tasks.
+/// - JumpRunner: does a planned chain of jumps (wind-up, flight, pause on the perch), used by all five tasks.
 /// - WindUp: the crouch with the front legs raised before a jump (the attack uses it directly).
 /// - SpiderTaskUtil: turning, stopping the walking AI, emotion-state sources, animations, debug log.
-/// - The pure planning helpers in Logic: JumpPlanner, LandingSpotFilter, FleeDirection, PounceMath, LaunchSpotFinder.
+/// - The pure planning helpers in Logic: JumpPlanner, LandingSpotFilter, FleeDirection, PounceMath, LaunchSpotFinder,
+///   and for hammock building BuildStanceFinder, ClingJump, BuildReach, HammockBuildSchedule.
 /// </summary>
 public static class TaskRegistration
 {
@@ -23,6 +24,7 @@ public static class TaskRegistration
     public const string JumpFleeCode = "jumpingspiders.jumpflee";
     public const string ExploreCode = "jumpingspiders.explore";
     public const string SleepCode = "jumpingspiders.sleep";
+    public const string BuildHammockCode = "jumpingspiders.buildhammock";
 
     public static void Register(ICoreServerAPI api)
     {
@@ -30,5 +32,6 @@ public static class TaskRegistration
         AiTaskRegistry.Register<AiTaskSpiderJumpFlee>(JumpFleeCode);
         AiTaskRegistry.Register<AiTaskSpiderExplore>(ExploreCode);
         AiTaskRegistry.Register<AiTaskSpiderSleep>(SleepCode);
+        AiTaskRegistry.Register<AiTaskSpiderBuildHammock>(BuildHammockCode);
     }
 }

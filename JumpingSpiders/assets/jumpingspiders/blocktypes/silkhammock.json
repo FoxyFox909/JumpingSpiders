@@ -72,8 +72,8 @@
 	// - Walls: a solid slab from the bottom of the cell up to the cradle's inner bottom (9/16), so a spider jumps
 	//   straight into the cradle and sleeps where it lands. Solid all the way down so that nothing can walk in
 	//   under the cradle. The cell above a wall hammock is usually open, so the jump can come in from above; under
-	//   another block it cannot be jumped into (the same 7/16 gap as below), and spiders never build or get one there
-	//   because both ask the jump planner first.
+	//   another block it cannot be jumped into (the same 7/16 gap as below), so spiders never build one there
+	//   (HammockBuilder.ChooseBuildFacing skips it) and wild ones get one only where the jump planner finds a way in.
 	// - Ceiling: a thin floor at the bottom of the cell. With the slab, the block holding the hammock would leave
 	//   only 7/16 of head room above it, and no jump arc can enter a gap that low (a 0.4 high spider would have to
 	//   fly in level). So the spider lands on this floor, under the cradle, and the sleep task lifts it into the

@@ -31,7 +31,8 @@ To make a zip for the game's `Mods` folder instead:
 
 The zip appears in `Releases/`.
 
-Unit tests (pure logic only: jump maths, jump planning, spider chunks, meal and despawn rules):
+Unit tests (pure logic only: jump maths, jump planning, spider chunks, meal and despawn rules, hammock building and
+naps):
 
 ```bash
 dotnet test JumpingSpiders.Tests/JumpingSpiders.Tests.csproj
@@ -44,7 +45,7 @@ dotnet test JumpingSpiders.Tests/JumpingSpiders.Tests.csproj
 | `JumpingSpiders/Config` | `JumpingSpidersConfig.cs`: every global knob, each with a comment |
 | `JumpingSpiders/Logic` | Pure C# with no game types: jump maths, the jump planner, spider chunks, rules. Unit-tested |
 | `JumpingSpiders/Jumping` | `JumpController`: launches and steers one jump of one spider |
-| `JumpingSpiders/AiTasks` | The four AI tasks: jump attack, jump flee, explore, sleep |
+| `JumpingSpiders/AiTasks` | The five AI tasks: jump attack, jump flee, explore, sleep (and daytime naps), build hammock |
 | `JumpingSpiders/Spider` | The spider's entity behaviors (meals, taming, growing up) and its saved attributes |
 | `JumpingSpiders/Hammock` | The Silk Hammock block, its block entity, and hammock finding and building |
 | `JumpingSpiders/Spawning` | Wild spawning in spider chunks, and wild hammocks on tree trunks |
@@ -56,9 +57,12 @@ dotnet test JumpingSpiders.Tests/JumpingSpiders.Tests.csproj
 Global knobs are in `ModConfig/jumpingspiders.json` inside the game's data folder. The file is created with the
 defaults on first start; `Config/JumpingSpidersConfig.cs` explains each one. Restart the world after changing it.
 An existing file keeps the values it has when a new version of the mod changes a default (only settings that are new
-get added), so edit or delete the file to get new defaults. This version changed `HammockHeightBias` (2 to 4),
-`HammockBuildSamples` (60 to 150) and `HammockBuildMaxPlanAttempts` (6 to 20), and added
-`CuriosityStayUpHoursMax` and `CuriosityStayUpMaxNightShare`.
+get added), so edit or delete the file to get new defaults.
+This version reworked hammock building: it removed `HammockHeightBias`, `HammockBuildSamples` and
+`HammockBuildMaxPlanAttempts`, changed `HammockSpacing` (4 to 3), `HammockBuildSearchRadius` (8 to 6),
+`HammockBuildSearchUp` (8 to 5) and `HammockBuildSearchDown` (3 to 2), and added `HammockBuildIntervalHours` and
+`HammockBuildRange`. It changed `CuriosityStayUpHoursMax` (3 to 1.8) and added the nap knobs `NapSlotHours`,
+`NapChanceMax`, `NapMinMinutes` and `NapMaxMinutes`.
 
 Per-task knobs are in the entity JSON (`assets/jumpingspiders/entities/land/jumpingspider-adult.json` and
 `-baby.json`), next to the task they belong to:
@@ -72,11 +76,13 @@ Per-task knobs are in the entity JSON (`assets/jumpingspiders/entities/land/jump
 | How high, far and deep a jump goes | `MaxJumpUp`, `MaxJumpHorizontal`, `MaxJumpDown` | 4, 6, 6 blocks |
 | Jumps per plan | `MaxPlannedJumps` | 2 |
 | Curiosity (rolled per spider per day) | `CuriosityMin`, `CuriosityMax`, `CuriosityNightMultiplier` | 0.2 to 1.0, times 0.2 at night |
-| How long a domesticated spider stays up after dusk | `CuriosityStayUpHoursMax`, `CuriosityStayUpMaxNightShare` | curiosity times 3 in-game hours, at most half the night |
+| How long a domesticated spider stays up after dusk | `CuriosityStayUpHoursMax`, `CuriosityStayUpMaxNightShare` | curiosity times 1.8 in-game hours, at most half the night |
+| Daytime naps | `NapSlotHours`, `NapChanceMax`, `NapMinMinutes`, `NapMaxMinutes` | one roll per 2-hour slot, chance 0.3 for the least curious falling to 0 for the most curious, 30 to 60 in-game minutes |
 | Hours a spider stays sated after a kill | `SatedHoursAfterKill` | 12 |
-| One hammock per this many blocks cubed | `HammockSpacing` | 4 |
-| How strongly hammock sites favour height | `HammockHeightBias` (built by spiders), `WildHammockHeightBias` (wild, on trunks) | 4, 2 |
-| How hard a spider looks for a high hammock site | `HammockBuildSamples`, `HammockBuildMaxPlanAttempts` | 150 block columns, 20 reach checks |
+| One hammock per this many blocks cubed | `HammockSpacing` | 3 |
+| Hammock building: how often, how close the spider must be, where it picks | `HammockBuildIntervalHours`, `HammockBuildRange`, `HammockBuildSearchRadius`, `HammockBuildSearchUp`, `HammockBuildSearchDown` | one attempt per in-game hour, 2 blocks, within 6 blocks, 5 up to 2 down |
+| How one build attempt is spread over ticks, and how long building takes | `pickTriesPerTick`, `maxPlanSearches`, `clingChecksPerTick`, `approachTimeoutMs`, `buildTimeMs` on the `jumpingspiders.buildhammock` task | 40 cells, 2 planner searches, 4 jump tests, 20 s, 1.5 s |
+| How strongly wild hammock sites on trunks favour height | `WildHammockHeightBias` | 2 |
 | Share of chunks that are spider chunks | `SpiderChunkFraction` | 0.04 |
 | Chance a wild spider comes with a hammock | `WildHammockChance` | 0.75 |
 | Carcass yield of the spider's victims | `deathByMultiplier` in the adult JSON | 0.2 |
@@ -94,12 +100,12 @@ nearest one.
 | Command | What it does |
 |---|---|
 | `/jspider chunk` | Is this a spider chunk? Shows climate, its wild hammock, and the nearest spider chunks |
-| `/jspider info` | Generation, wild or domesticated, hungry, asleep, curiosity and how long it stays up after dusk, home hammock |
+| `/jspider info` | Generation, wild or domesticated, hungry, asleep, curiosity and how long it stays up after dusk, nap chance per slot and whether it is napping, whether it owes a hammock and when its next build attempt comes, home hammock |
 | `/jspider hungry` | Makes the spider hungry so it hunts |
 | `/jspider sated [hours]` | Makes it sated |
 | `/jspider generation <n>` | Sets its generation. 0 is wild, 1 or more is domesticated |
 | `/jspider spawn [auto\|hammock\|nohammock] [now\|day\|night]` | Spawns a wild spider 2 to 5 blocks from you, in any chunk, and lists the rules that would stop a natural spawn here. `hammock`: on a tree within 10 blocks (asleep in it at `night`), or none if no tree there works |
-| `/jspider build` | Makes a domesticated adult try to build a hammock now |
+| `/jspider build` | Makes a domesticated adult start a build attempt now, ignoring its hourly timer and hunger. Says which spot it picked; the result follows in chat |
 
 Spiders and the hammock are also in the creative inventory. A spider placed from there counts as kept by the
 player and never despawns.
@@ -149,14 +155,22 @@ Use creative mode, `/time set` to move between day and night, and `/jspider info
     They hunt when hungry. After 2 valid kills by the female and 1 by the male, the female becomes pregnant.
 16. Wild chickens, wild hares, raccoons, troughs and meat on the ground give no breeding progress.
 17. A caught wild spider still flees from you, never builds a hammock, and adopts a free hammock near the pen.
-18. The babies are generation 1: they do not flee from you. As adults, each valid meal makes them build a
-    hammock, never closer than one per 4x4x4 blocks, and they sleep in a free one at night.
-19. Where they build: in a pen with walls 5 high and nothing else, almost always on a wall, mostly 3 blocks up
-    (the highest they can jump into). With a post or perch 3 to 4 high, mostly high up its side, on top of it, or
-    on the wall top they can reach from it. On bare ground, on the ground. `/jspider build` builds one at once; break it and repeat to see the spread.
-20. At dusk, domesticated spiders stay up for a while before they go to bed: up to 3 in-game hours for a very
-    curious one, about half an hour for the least curious (`/jspider info` shows today's curiosity and how long).
+18. The babies are generation 1: they do not flee from you. As adults, each kill earns one hammock: while
+    sated they make one build attempt per in-game hour until one succeeds, then none until the next kill
+    (`/jspider info` shows whether one is owed and when the next attempt comes). No two hammocks closer than one
+    per 3x3x3 blocks; they sleep in a free one at night.
+19. Watch an attempt with `/jspider build` (break the hammock and repeat to see the spread): the spider picks a
+    spot it can see within 6 blocks, at any height, then gets within 2 blocks of it: it builds standing where it
+    is, or hops or walks closer, or jumps at the wall or ceiling next to the spot, holds on there for a moment
+    while it builds, and drops. A spot too close to another hammock, or one it cannot get to, fails, and the next
+    try comes an hour later. Look for jitter while it holds on, and whether the server hitches.
+20. At dusk, domesticated spiders stay up for a while before they go to bed: up to 1.8 in-game hours for a very
+    curious one, about 20 minutes for the least curious (`/jspider info` shows today's curiosity and how long).
     Meanwhile they hop around less than by day and hunt when hungry. A spider already asleep stays asleep.
+    By day, spiders that are not very curious take naps of 30 to 60 in-game minutes in a hammock (their home
+    hammock for wild ones), at different times from each other, and hop out afterwards as in the morning.
+    `/jspider info` shows the nap chance per 2-hour slot and whether it is napping. A spider with no hammock it
+    can get to never naps. Walk up to a napping wild spider: it stays put; break its hammock: it attacks you.
 21. Hit a domesticated spider: it flees and never attacks. Break its hammock while it sleeps: no attack.
 22. Two adult males or two adult females fight when hungry. A male and a female do not. Babies are left alone.
 
@@ -175,17 +189,30 @@ Please also keep an eye on server performance with many spiders, and on spiders 
 - A meal is a kill of a farm-born chicken or hare. Spiders only hunt when hungry.
 - Wild hammocks appear when a spider first spawns in a spider chunk, not when the world is generated.
 - Night is when the sun is below the horizon, so its length follows the season and latitude.
-- A sleeping wild spider does not flee when a player walks up, only when attacked or when its hammock breaks.
+- A sleeping wild spider (at night or napping) does not flee when a player walks up, only when attacked or when its
+  hammock breaks.
 - A hammock that breaks because its support was removed (a felled tree) angers nobody.
 - Wild spiders go to bed at dusk. Domesticated ones stay up for their daily curiosity times
-  `CuriosityStayUpHoursMax` (3) in-game hours, but never more than half the night, exploring at the lower night
+  `CuriosityStayUpHoursMax` (1.8) in-game hours, but never more than half the night, exploring at the lower night
   curiosity and hunting if hungry. This only delays going to bed: a spider that is asleep is never woken by it, and
   everyone wakes at dawn as before. A day's curiosity is rolled at midnight, so a spider still up after midnight
   goes on with the new day's roll.
-- A domesticated spider builds its hammock at the highest spot it can jump into within 8 blocks, most of the time
-  (the choice is random, weighted strongly by height). It builds at floor level only when nothing higher is in
-  reach, or now and then when the high spots are few. If none of the 20 spots it checks is reachable, it builds
-  nothing for that meal (in a bare pen with walls 5 high about one meal in 25).
+- A kill earns a domesticated adult one hammock (any kill; set `HammockNeedsFarmPrey` to require a farm-born
+  chicken or hare). While sated it makes one build attempt per in-game hour until
+  one succeeds. An attempt picks one spot at random among the cells within 6 blocks that could hold a hammock and
+  that it can see, every one equally likely whatever its height (in a pen with walls 5 high about 4 in 10 end up at
+  floor level and the rest spread over the four wall heights, simply because the floor has the most such cells; under a
+  roof many hang from the ceiling). If another hammock is too close (one per 3x3x3), the
+  attempt fails. Otherwise the spider must get within 2 blocks of the spot (from the middle of its body to the
+  nearest point of the cell, with nothing solid in between), standing, after a hop or a walk, or holding on to the
+  wall or ceiling next to it after a jump; from the floor that reaches spots up to 5 blocks up. If it cannot get
+  there within 20 seconds, the attempt fails. A failed attempt waits for the next hour. In tests in walled pens,
+  about 98 attempts in 100 that passed the spacing rule built a hammock, two thirds standing, the rest holding on to
+  a wall or under the roof. As a pen fills up, more attempts fail on the spacing rule.
+- Spiders nap by day: once per 2-hour slot (shifted per spider by a random amount each day) a spider rolls for a
+  nap with a chance of `NapChanceMax` (0.3) times how far its curiosity for the day is below the maximum, so the
+  least curious nap about twice a day and the most curious never. A nap lasts 30 to 60 in-game minutes in a
+  hammock, never on the bare ground; one that runs into dusk becomes the night's sleep.
 - A spider with no free hammock within 24 blocks sleeps where it stands.
 - Spiders take no fall damage.
 

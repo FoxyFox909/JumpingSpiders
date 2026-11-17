@@ -76,6 +76,22 @@ public static class SpiderTaskUtil
     }
 
     /// <summary>
+    /// Pauses (true) or resumes (false) the spider's physics, and stops its motion. While paused, the game applies no
+    /// gravity or motion to it, so it stays exactly where it is although nothing holds it up: a spider lifted into a
+    /// ceiling hammock's cradle (the sleep task), or one holding on to a wall or ceiling while it builds a hammock.
+    /// This is how vanilla's entity mover tool holds a creature (EnableModulesApplication of the controlled physics).
+    /// </summary>
+    public static void SetPhysicsPaused(EntityAgent entity, bool paused)
+    {
+        EntityBehaviorControlledPhysics physics = entity.GetBehavior<EntityBehaviorControlledPhysics>();
+        if (physics != null)
+        {
+            physics.EnableModulesApplication = !paused;
+        }
+        entity.Pos.Motion.Set(0, 0, 0);
+    }
+
+    /// <summary>
     /// The entity that caused the given emotion state (for example the attacker behind "fleeondamage"), or null
     /// when the state is not active, has no source, or the source is no longer in the world.
     /// </summary>

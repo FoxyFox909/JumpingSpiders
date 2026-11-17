@@ -7,7 +7,7 @@ namespace JumpingSpiders.Tests;
 /// A tiny block world for planner tests. Each block fills its cell from the bottom up to a height
 /// (1 = full block, 0.5 = slab). The spider is a box HalfWidth wide each way and Height tall, feet at the bottom centre.
 /// </summary>
-public class TestBlockWorld : IJumpWorld
+public class TestBlockWorld : IJumpWorld, ISolidPointWorld
 {
     public double HalfWidth = 0.3;
     public double Height = 0.5;
@@ -93,6 +93,19 @@ public class TestBlockWorld : IJumpWorld
             return false;
         }
         return !IsFree(x + 0.5, standY - 0.05, z + 0.5);
+    }
+
+    public bool IsSolidAt(double x, double y, double z)
+    {
+        int bx = (int)Math.Floor(x);
+        int by = (int)Math.Floor(y);
+        int bz = (int)Math.Floor(z);
+        double top;
+        if (!blockTops.TryGetValue(Key(bx, by, bz), out top))
+        {
+            return false;
+        }
+        return y - by <= top;
     }
 
     private static long Key(int x, int y, int z)

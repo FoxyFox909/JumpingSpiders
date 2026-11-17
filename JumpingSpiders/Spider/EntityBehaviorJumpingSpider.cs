@@ -18,10 +18,10 @@ namespace JumpingSpiders;
 ///
 /// Its jobs:
 /// - OnKilledEntity: the spider killed something. Any kill makes it sated; a valid meal (farm-born chicken or
-///   hare) credits breeding saturation and makes a domesticated adult build a hammock (as soon as it stands on the
-///   ground again: the killing bite is usually made in mid-leap). SpiderRegistration calls
-///   this for every kill through the game's global death event; AI tasks may call it too (a repeat call for the
-///   same victim is ignored).
+///   hare) credits breeding saturation and, for a domesticated adult, owes one hammock: the build task
+///   (AiTaskSpiderBuildHammock) then makes an attempt every in-game hour while the spider is sated, until one
+///   succeeds. SpiderRegistration calls this for every kill through the game's global death event; AI tasks may call
+///   it too (a repeat call for the same victim is ignored).
 /// - The "live prey only" rule: the vanilla eat task (needed so a baited basket trap lures the spider) adds
 ///   breeding saturation for every portion it eats. This behavior takes that back at once, so only meals
 ///   credited here count for breeding. See SaturationGuard.
@@ -58,10 +58,6 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
     private bool enforcingSaturation;
 
     private float slowCheckAccum;
-
-    // True after a meal that earns a hammock, until the spider is on the ground and builds it. In memory only: a
-    // spider is airborne for a second at most, so a save in between (which drops the build) is very unlikely.
-    private bool hammockBuildPending;
 
     public EntityBehaviorJumpingSpider(Entity entity) : base(entity)
     {
@@ -124,19 +120,6 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
         // before the eat task in the same tick. It is two attribute reads and a compare.
         EnforceSaturationLimit();
 
-        // A meal made while airborne: build once the spider has landed. A spider that ends up in water gives up.
-        if (hammockBuildPending)
-        {
-            if (entity.OnGround)
-            {
-                BuildPendingHammock();
-            }
-            else if (entity.Swimming || entity.FeetInLiquid)
-            {
-                hammockBuildPending = false;
-            }
-        }
-
         slowCheckAccum += deltaTime;
         if (slowCheckAccum >= SlowCheckIntervalSeconds)
         {
@@ -147,7 +130,7 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
 
     // ---------------- Kills and meals ----------------
 
-    /// <summary>Called when this spider killed victim (server only): sated; meal credit; hammock building.</summary>
+    /// <summary>Called when this spider killed victim (server only): sated; meal credit; a hammock owed.</summary>
     public void OnKilledEntity(Entity victim)
     {
         if (entity.World.Side != EnumAppSide.Server || victim == null)
@@ -174,6 +157,14 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
         entity.World.Logger.Debug("[jumpingspiders] {0} (id {1}) killed {2} (generation {3}); valid meal: {4}",
             entity.Code, entity.EntityId, victim.Code, victimGeneration, validMeal);
 
+        if (MealRules.ShouldBuildHammock(validMeal, isAdult, SpiderAttributes.IsDomesticated(entity), config.HammockNeedsFarmPrey))
+        {
+            // One hammock owed for this kill. The build task makes the attempts (hourly, while sated), starting as soon
+            // as the spider stands on the ground again: the killing bite is usually made in mid-leap. The time of the
+            // next attempt is left as it is, so a kill never brings an attempt sooner than an hour after the last one.
+            SpiderAttributes.SetHammockBuildArmed(entity, true);
+        }
+
         if (!validMeal)
         {
             return;
@@ -185,31 +176,6 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
         SpiderAttributes.MarkKeptByPlayer(entity);
         UpdateDespawnProtection();
 
-        if (MealRules.ShouldBuildHammock(validMeal, isAdult, SpiderAttributes.IsDomesticated(entity)))
-        {
-            // The bite usually lands while the spider is still in the air. The builder checks reachability with the
-            // jump planner from the spider's feet, and planning from mid-air would accept spots that are out of reach
-            // from the ground, so the build waits until the spider stands again (see OnGameTick).
-            hammockBuildPending = true;
-            if (entity.OnGround)
-            {
-                BuildPendingHammock();
-            }
-        }
-    }
-
-    // Builds the hammock a meal earned. Called once the spider stands on the ground.
-    private void BuildPendingHammock()
-    {
-        hammockBuildPending = false;
-        EntityAgent agent = entity as EntityAgent;
-        if (agent == null)
-        {
-            return;
-        }
-        bool built = HammockBuilder.TryBuildHammockFor(agent);
-        entity.World.Logger.Debug("[jumpingspiders] {0} (id {1}) tried to build a hammock after a meal: {2}",
-            entity.Code, entity.EntityId, built);
     }
 
     // Adds portions to the vanilla breeding saturation, as a real meal the guard lets through.
