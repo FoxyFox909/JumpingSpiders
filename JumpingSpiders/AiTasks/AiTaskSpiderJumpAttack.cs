@@ -4,6 +4,7 @@ using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
 using Vintagestory.API.Config;
 using Vintagestory.API.Datastructures;
+using Vintagestory.API.MathTools;
 using Vintagestory.GameContent;
 
 namespace JumpingSpiders;
@@ -28,7 +29,9 @@ namespace JumpingSpiders;
 ///    speed (leadFactor) for the flight time. If no single jump reaches it any more, the attack ends without a jump.
 ///    If the target is already within biting reach, the spider bites without jumping.
 /// 4. "Damage on landing": during the flight and on landing, the first moment the spider's box comes within hitReach
-///    of the target's box it bites once. If the prey stepped aside the spider lands in the empty spot: a miss.
+///    of the target's box it bites once. The flight is checked at every physics tick and halfway between them
+///    (JumpController.FlightPath), as the spider moves up to about 0.9 blocks per tick. If the prey stepped aside the
+///    spider lands in the empty spot: a miss.
 /// Every ending goes through FinishExecute, which starts the cooldown (vanilla mincooldown/maxcooldown, ms).
 /// The kill itself is credited by the spider's own behavior through the game's death event.
 /// </summary>
@@ -78,6 +81,7 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
     private bool approachFailed;
     private bool walking;
     private bool hitDone;
+    private int flightPointsChecked;
 
     public AiTaskSpiderJumpAttack(EntityAgent entity, JsonObject taskConfig, JsonObject aiConfig)
         : base(entity, taskConfig, aiConfig)
@@ -93,8 +97,8 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         // Blocks: it starts winding up once the target is this close (and one jump can reach it).
         pounceRange = taskConfig["pounceRange"].AsFloat(5);
         // Milliseconds: the wind-up lasts a random time between these two.
-        windUpMinMs = taskConfig["windUpMinMs"].AsInt(500);
-        windUpMaxMs = taskConfig["windUpMaxMs"].AsInt(1250);
+        windUpMinMs = taskConfig["windUpMinMs"].AsInt(350);
+        windUpMaxMs = taskConfig["windUpMaxMs"].AsInt(900);
         // 0..1: how far ahead of a moving target it aims (0 = where it is, 1 = where it will be at landing).
         leadFactor = taskConfig["leadFactor"].AsFloat(0.5f);
         // Blocks between the spider's box and the target's box that still count as a hit.
@@ -382,9 +386,10 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         List<JumpStep> plan = new List<JumpStep>();
         plan.Add(step);
         runner.Start(plan);
+        flightPointsChecked = 0;
         Phase = AttackPhase.Leap;
         SpiderTaskUtil.Log(entity, LogName, "leaps from " + SpiderTaskUtil.Format(step.FromX, step.FromY, step.FromZ)
-            + " to " + SpiderTaskUtil.Format(step.ToX, step.ToY, step.ToZ) + ", flight " + step.FlightSeconds.ToString("0.000")
+            + " to " + SpiderTaskUtil.Format(step.ToX, step.ToY, step.ToZ) + ", flight " + FlightSecondsOf(step).ToString("0.000")
             + " s; target at " + SpiderTaskUtil.Format(targetEntity.Pos.X, targetEntity.Pos.Y, targetEntity.Pos.Z));
         return true;
     }
@@ -392,7 +397,7 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
     private bool ContinueLeap(float dt)
     {
         runner.Tick(dt);
-        if (!hitDone && !SpiderTaskUtil.IsGone(entity, targetEntity) && IsWithinBite())
+        if (!hitDone && !SpiderTaskUtil.IsGone(entity, targetEntity) && (TouchedAlongFlight() || IsWithinBite()))
         {
             Bite();
         }
@@ -440,11 +445,12 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
             return step;
         }
 
-        // Motion is in blocks per 1/60 s; the planner works in blocks per second.
+        // Motion is in blocks per 1/60 s; the planner works in blocks per second. Lead by the real (sped-up) flight time.
         double speedX = targetEntity.Pos.Motion.X * JumpMath.BlocksPerSecondPerMotionUnit;
         double speedZ = targetEntity.Pos.Motion.Z * JumpMath.BlocksPerSecondPerMotionUnit;
-        double aheadX = PounceMath.LeadPosition(targetX, speedX, step.FlightSeconds, leadFactor);
-        double aheadZ = PounceMath.LeadPosition(targetZ, speedZ, step.FlightSeconds, leadFactor);
+        double flightSeconds = FlightSecondsOf(step);
+        double aheadX = PounceMath.LeadPosition(targetX, speedX, flightSeconds, leadFactor);
+        double aheadZ = PounceMath.LeadPosition(targetZ, speedZ, flightSeconds, leadFactor);
         JumpStep led = PlanJumpTo(world, aheadX, targetY, aheadZ, limits);
         if (led != null)
         {
@@ -478,16 +484,49 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         return step;
     }
 
+    // How long the spider really is in the air on this jump (the arc is flown faster than the game's gravity would).
+    private static double FlightSecondsOf(JumpStep step)
+    {
+        return FlightSchedule.DrivenSeconds(step.FlightTicks, JumpingSpidersModSystem.Config.JumpFlightSpeedMultiplier);
+    }
+
     // True when the spider's collision box is within hitReach of the target's.
     private bool IsWithinBite()
+    {
+        return IsWithinBiteAt(entity.Pos.X, entity.Pos.Y, entity.Pos.Z);
+    }
+
+    // Checks the points of the flight recorded since the last call (one per physics tick, see
+    // JumpController.FlightPath), and the point halfway to each, against where the target is now.
+    private bool TouchedAlongFlight()
+    {
+        List<Vec3d> path = runner.Controller.FlightPath;
+        if (flightPointsChecked < 1)
+        {
+            flightPointsChecked = 1;
+        }
+        bool touched = false;
+        for (int i = flightPointsChecked; i < path.Count && !touched; i++)
+        {
+            Vec3d before = path[i - 1];
+            Vec3d after = path[i];
+            touched = IsWithinBiteAt((before.X + after.X) / 2, (before.Y + after.Y) / 2, (before.Z + after.Z) / 2)
+                || IsWithinBiteAt(after.X, after.Y, after.Z);
+        }
+        flightPointsChecked = path.Count;
+        return touched;
+    }
+
+    // True when the spider's collision box, with its feet at (x, y, z), is within hitReach of the target's box.
+    private bool IsWithinBiteAt(double x, double y, double z)
     {
         if (targetEntity.Pos.Dimension != entity.Pos.Dimension)
         {
             return false;
         }
         double gap = PounceMath.BoxGap(
-            entity.Pos.X + entity.CollisionBox.X1, entity.Pos.Y + entity.CollisionBox.Y1, entity.Pos.Z + entity.CollisionBox.Z1,
-            entity.Pos.X + entity.CollisionBox.X2, entity.Pos.Y + entity.CollisionBox.Y2, entity.Pos.Z + entity.CollisionBox.Z2,
+            x + entity.CollisionBox.X1, y + entity.CollisionBox.Y1, z + entity.CollisionBox.Z1,
+            x + entity.CollisionBox.X2, y + entity.CollisionBox.Y2, z + entity.CollisionBox.Z2,
             targetEntity.Pos.X + targetEntity.CollisionBox.X1, targetEntity.Pos.Y + targetEntity.CollisionBox.Y1, targetEntity.Pos.Z + targetEntity.CollisionBox.Z1,
             targetEntity.Pos.X + targetEntity.CollisionBox.X2, targetEntity.Pos.Y + targetEntity.CollisionBox.Y2, targetEntity.Pos.Z + targetEntity.CollisionBox.Z2);
         return gap <= hitReach;

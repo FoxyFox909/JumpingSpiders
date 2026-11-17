@@ -44,7 +44,7 @@ dotnet test JumpingSpiders.Tests/JumpingSpiders.Tests.csproj
 |---|---|
 | `JumpingSpiders/Config` | `JumpingSpidersConfig.cs`: every global knob, each with a comment |
 | `JumpingSpiders/Logic` | Pure C# with no game types: jump maths, the jump planner, spider chunks, rules. Unit-tested |
-| `JumpingSpiders/Jumping` | `JumpController`: launches and steers one jump of one spider |
+| `JumpingSpiders/Jumping` | `JumpController`: launches one jump of one spider and flies it along the planned arc, tick by tick |
 | `JumpingSpiders/AiTasks` | The five AI tasks: jump attack, jump flee, explore, sleep (and daytime naps), build hammock |
 | `JumpingSpiders/Spider` | The spider's entity behaviors (meals, taming, growing up) and its saved attributes |
 | `JumpingSpiders/Hammock` | The Silk Hammock block, its block entity, and hammock finding and building |
@@ -69,11 +69,12 @@ Per-task knobs are in the entity JSON (`assets/jumpingspiders/entities/land/jump
 
 | Knob | Where | Default |
 |---|---|---|
-| Wind-up time before an attack jump | `windUpMinMs` / `windUpMaxMs` on the jump attack tasks | 500 to 1250 ms |
+| Wind-up time before a jump (attack, exploring, into the hammock; fleeing jumps have none) | `windUpMinMs` / `windUpMaxMs` on the jump attack, explore and sleep tasks | 350 to 900 ms |
 | Jump cooldown | `mincooldown` / `maxcooldown` on each task | 1.5 to 3 s for attacks |
 | Bite damage | `damage` on the jump attack tasks | 3 to prey, 2 to players, 1 for babies |
 | Jump angle, maximum speed | `JumpAngleDeg`, `MaxJumpSpeed` in the config | 50 degrees, 18 |
 | How high, far and deep a jump goes | `MaxJumpUp`, `MaxJumpHorizontal`, `MaxJumpDown` | 4, 6, 6 blocks |
+| How fast a jump is flown (same arc, same landing spot; 1 = the game's natural gravity) | `JumpFlightSpeedMultiplier` in the config | 1.45 |
 | Jumps per plan | `MaxPlannedJumps` | 2 |
 | Curiosity (rolled per spider per day) | `CuriosityMin`, `CuriosityMax`, `CuriosityNightMultiplier` | 0.2 to 1.0, times 0.2 at night |
 | How long a domesticated spider stays up after dusk | `CuriosityStayUpHoursMax`, `CuriosityStayUpMaxNightShare` | curiosity times 1.8 in-game hours, at most half the night |
@@ -233,7 +234,7 @@ Animations each spider shape needs, with these exact lowercase codes:
 |---|---|
 | `idle` | Standing |
 | `walk`, `run` | Moving, stalking |
-| `jumpwindup` | Front legs raised before an attack or exploring jump. Held for 0.5 to 1.25 s |
+| `jumpwindup` | Front legs raised before an attack, exploring or hammock jump. Held for 0.35 to 0.9 s |
 | `jump` | In the air |
 | `sleep` | In the hammock at night |
 | `hurt`, `die` | Played by the game itself |

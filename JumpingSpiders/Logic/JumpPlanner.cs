@@ -23,7 +23,8 @@ public static class JumpPlanner
     /// The engine moves an entity vertically before horizontally in each physics tick, so on its last tick in
     /// the air the spider comes down at the position of the tick before. There must be footing under it there.
     /// We check a little further back than one tick of travel (this factor times one tick) to allow for the
-    /// small steering lag of JumpController.
+    /// small steering lag of JumpController. A sped-up flight also covers at most one tick of the natural arc in its
+    /// last tick (FlightSchedule), so this check holds for it too.
     /// </summary>
     public const double LastTickFootingMargin = 1.25;
 

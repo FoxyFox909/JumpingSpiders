@@ -41,6 +41,9 @@ public class JumpLimits
     /// <summary>How many jumps the planner may chain to reach a goal (2 = one intermediate perch).</summary>
     public int MaxPlannedJumps = 2;
 
-    /// <summary>Longest allowed flight, in seconds. Also the safety timeout of a jump in the game.</summary>
+    /// <summary>
+    /// Longest allowed flight, in seconds of the natural flight (the game flies it faster, see
+    /// Config.JumpFlightSpeedMultiplier and FlightSchedule).
+    /// </summary>
     public double MaxFlightSeconds = 3;
 }

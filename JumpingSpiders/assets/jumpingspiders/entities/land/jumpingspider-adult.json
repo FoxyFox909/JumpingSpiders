@@ -75,7 +75,8 @@
 			{ code: "run", animation: "run" },
 			// The game plays 30 animation frames per second times animationSpeed. The male's wind-up is 30 frames and
 			// holds its last frame, so at 4 the front legs are up after 0.25 s and stay up for the rest of the wind-up
-			// (the tasks' windUpMinMs..windUpMaxMs: 200 to 1250 ms). At 1 the raise would take a full second.
+			// (the tasks' windUpMinMs..windUpMaxMs: 350 to 900 ms, so even the shortest wind-up shows the full raise).
+			// At 1 the raise would take a full second.
 			{ code: "jumpwindup", animation: "jumpwindup", animationSpeed: 4, easeInSpeed: 6, easeOutSpeed: 6, blendMode: "Average" },
 			{ code: "jump", animation: "jump", blendMode: "Average" },
 			{ code: "sleep", animation: "sleep", easeInSpeed: 4, easeOutSpeed: 4, blendMode: "Average" },
@@ -161,8 +162,8 @@
 						seekingRange: 10,
 						loseTargetRange: 20,
 						pounceRange: 5,
-						windUpMinMs: 500,
-						windUpMaxMs: 1250,
+						windUpMinMs: 350,
+						windUpMaxMs: 900,
 						leadFactor: 0.5,
 						hitReach: 0.4,
 						damage: 2,
@@ -259,8 +260,8 @@
 						maxLaunchSpotPlanChecks: 8,
 						maxTravelAttempts: 3,
 						travelTimeoutMs: 30000,
-						windUpMinMs: 200,
-						windUpMaxMs: 400,
+						windUpMinMs: 350,
+						windUpMaxMs: 900,
 						pauseBetweenJumpsMs: 300,
 						turnSpeedDegPerSec: 360,
 						leaveJumpRadius: 4,
@@ -289,8 +290,8 @@
 						seekingRange: 10,
 						loseTargetRange: 16,
 						pounceRange: 5,
-						windUpMinMs: 500,
-						windUpMaxMs: 1250,
+						windUpMinMs: 350,
+						windUpMaxMs: 900,
 						leadFactor: 0.5,
 						hitReach: 0.4,
 						damage: 3,
@@ -376,8 +377,8 @@
 						territoryRadius: 12,
 						pauseMinMs: 800,
 						pauseMaxMs: 3000,
-						windUpMinMs: 250,
-						windUpMaxMs: 600,
+						windUpMinMs: 350,
+						windUpMaxMs: 900,
 						turnSpeedDegPerSec: 360,
 						// Rest after an outing (ms).
 						mincooldown: 8000,

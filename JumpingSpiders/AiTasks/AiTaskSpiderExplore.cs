@@ -82,8 +82,8 @@ public class AiTaskSpiderExplore : AiTaskBase
 
         runner = new JumpRunner(entity);
         // Milliseconds: the short crouch before each hop, a random time between these two (0 and 0 = none).
-        runner.WindUpMinSeconds = taskConfig["windUpMinMs"].AsInt(250) / 1000f;
-        runner.WindUpMaxSeconds = taskConfig["windUpMaxMs"].AsInt(600) / 1000f;
+        runner.WindUpMinSeconds = taskConfig["windUpMinMs"].AsInt(350) / 1000f;
+        runner.WindUpMaxSeconds = taskConfig["windUpMaxMs"].AsInt(900) / 1000f;
         // Degrees per second: how fast it turns towards the hop direction during the crouch.
         runner.TurnSpeedRadPerSec = taskConfig["turnSpeedDegPerSec"].AsFloat(360) * (float)Math.PI / 180f;
         // Animation codes from the entity JSON; "" = none.

@@ -67,8 +67,20 @@ public class JumpingSpidersConfig
     /// <summary>How many jumps the planner may chain (2 = one intermediate perch).</summary>
     public int MaxPlannedJumps = 2;
 
-    /// <summary>Safety timeout of one jump in the game, and the longest flight the solver plans, in seconds.</summary>
+    /// <summary>
+    /// The longest flight the solver plans, in seconds of the natural flight (at JumpFlightSpeedMultiplier 1).
+    /// The game also gives up a flight after this time divided by JumpFlightSpeedMultiplier (a safety timeout).
+    /// </summary>
     public double MaxFlightSeconds = 3;
+
+    /// <summary>
+    /// How many times as fast as the game's own gravity would carry it a spider flies through the air. Every jump
+    /// (attack, flee, exploring, going to a hammock) follows the same arc and lands on the same spot whatever this is;
+    /// only the time in the air changes. 1.45 = the arc is flown 1.45 times as fast, so a jump is over in about 69% of
+    /// the time (0.5 s becomes about 0.35 s). 1 = the natural flight, exactly as the game's physics would fly it.
+    /// The jump limits above (reach, MaxJumpSpeed, MaxFlightSeconds) describe the natural arc and stay as they are.
+    /// </summary>
+    public double JumpFlightSpeedMultiplier = 1.45;
 
     /// <summary>If the spider has not left the ground this many seconds after a launch, the jump is given up.</summary>
     public double JumpLiftoffTimeoutSeconds = 0.3;

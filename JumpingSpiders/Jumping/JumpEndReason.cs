@@ -24,7 +24,7 @@ public enum JumpEndReason
     /// <summary>It never left the ground (something held it down, or a block was right above it).</summary>
     NoLiftoff,
 
-    /// <summary>The flight took longer than Config.MaxFlightSeconds; the spider falls normally from here.</summary>
+    /// <summary>The flight took longer than its timeout (Config.MaxFlightSeconds, sped up like the flight); the spider falls normally from here.</summary>
     TimedOut,
 
     /// <summary>Cancel() was called, or the entity is being removed from the world.</summary>
