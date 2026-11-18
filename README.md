@@ -4,7 +4,7 @@ A Vintage Story code mod (game version 1.22.7) that adds the Jumping Spider, a p
 its prey, and the Silk Hammock block it sleeps in.
 
 Both adult sexes share the real adult model, with walk, run and jump animations, and two texture variants that
-are still being painted; the female draws her pedipalps smaller. The spiderling's model and texture are
+are still being painted; the female draws her pedipalps thinner. The spiderling's model and texture are
 placeholders (a box with a vanilla hare texture). See [Assets to make](#assets-to-make).
 
 ## Build and run
@@ -94,7 +94,7 @@ Per-task knobs are in the entity JSON (`assets/jumpingspiders/entities/land/jump
 | Carcass yield of the spider's victims | `deathByMultiplier` in the adult JSON | 0.2 |
 | Breeding | the `multiply` behavior in the adult JSON | 2 meals, 4 days pregnant, 1 to 3 babies |
 | Growing up | `hoursToGrow` in the baby JSON | 120 in-game hours |
-| Model parts drawn at another size, per sex | `elementScalesByType` on the client `jumpingspiders.spider` behavior in the adult JSON | female `PedipalpL` and `PedipalpR` 0.6 (a placeholder to tune by eye), male as modelled |
+| Model parts drawn at another size or shape, per sex | `elementScalesByType` on the client `jumpingspiders.spider` behavior in the adult JSON | female `PedipalpL`, `PedipalpLB`, `PedipalpR`, `PedipalpRB` `[1, 0.6, 0.6]` (as long, 0.6 as thick; placeholders to tune by eye), male as modelled |
 
 `DomesticatedFromGeneration` in the config and the `maxGeneration: 0` / `minGeneration: 1` values in the entity
 JSON must be changed together.
@@ -207,9 +207,11 @@ Use creative mode, `/time set` to move between day and night, and `/jspider info
 26. Spawn several adults of each sex (`/jspider spawn`): about half wear `male.png` and half `male2.png`
     (`/jspider info` shows the variant: 0 or 1). A spider keeps its variant after a save and reload and after a
     trip in a basket trap. A spiderling that grows up gets a new random variant (the baby has no variants yet).
-27. Females have smaller pedipalps than males (0.6 of the size), still attached at the base, and they move with
-    every animation. Males look exactly as modelled. The client log shows no warning from `jumpingspiders`.
-    The female's creature item in the inventory shows the male's full-size pedipalps (items cannot scale parts).
+27. Females have pedipalps as long as the male's but thinner (0.6 as thick), both the upper part and the claw,
+    still attached at the base and at the bend, and they move with every animation without stretching or leaning
+    out of shape (watch the claw in the jump wind-up, the jump and sleep). The texture on them is squeezed to the
+    thinner faces. Males look exactly as modelled. The client log shows no warning from `jumpingspiders`.
+    The female's creature item in the inventory shows the male's pedipalps (items cannot change parts).
 
 Please also keep an eye on server performance with many spiders, and on spiders near water.
 
@@ -296,15 +298,29 @@ layout to `alternates`. A spiderling has no variants yet, so a spider gets a new
 the baby's texture has as many alternates as the adult's, growing up keeps the baby's variant (vanilla behaviour).
 The creature item always shows `male.png`.
 
-**The female's smaller pedipalps** are made from the same model file, with no second model and no extra
+**The female's thinner pedipalps** are made from the same model file, with no second model and no extra
 keyframes. `elementScalesByType` on the client `jumpingspiders.spider` behavior in the adult JSON lists, per sex,
-model elements to draw at another size: `"*-female": { "PedipalpL": 0.6, "PedipalpR": 0.6 }`. Element names are the
-ones in VS Model Creator (exact spelling and case). A scaled element shrinks toward its rotation origin, its child
-elements (`PedipalpLB`, `PedipalpRB`) shrink with it, and the animations still move it; keyframe offsets on it are
-scaled too. Any element can be listed, for either sex. Before drawing a spider the game hands the model to the
-behavior, which scales those elements on a copy of it: the loaded model is shared by every spider of both sexes, so
-the male is never touched. The server does not draw models and keeps the model only for animation timing, so it
-needs no scaling. If an element in the list is renamed in the editor, the client log warns about it.
+model elements to draw at another size or shape. Element names are the ones in VS Model Creator (exact spelling and
+case). Each takes one of two kinds of value:
+
+- **One number**, a uniform scale, such as `"PedipalpL": 0.6`. The element shrinks toward its rotation origin, its
+  child elements shrink with it, and keyframe offsets on it are scaled too.
+- **Three numbers `[x, y, z]`**, one factor per axis of the element's own box: the X, Y and Z of its Size in the
+  editor, whatever the element's rotation. The box shrinks toward the rotation origin on each axis. Only that
+  element changes: its children keep their size and are moved so they stay attached at their joints, so list each
+  child that should change too, in its own axes. Keyframe offsets are not scaled.
+
+The female's default is `[1, 0.6, 0.6]` on `PedipalpL`, `PedipalpLB`, `PedipalpR` and `PedipalpRB`: in all four, X is
+the length and Y and Z are the thickness, so the pedipalps keep the male's length and are 0.6 as thick. Why
+three numbers reshape the box instead of setting the element's scale: the game applies an element's scale after
+its children's rotation, so a scale that differs per axis on `PedipalpL` would make the claw (`PedipalpLB`, turned
+90 degrees inside it) shorter instead of thinner, and skew it out of a box shape whenever an animation turns it (the
+jump and sleep animations do). A reshaped box has no scale in its matrix, so nothing below it can skew.
+
+Any element can be listed, for either sex. Before drawing a spider the game hands the model to the behavior, which
+changes those elements on a copy of it: the loaded model is shared by every spider of both sexes, so the male is
+never touched. The server does not draw models and keeps the model only for animation timing, so it needs none of
+this. If an element in the list is renamed in the editor, the client log warns about it.
 
 The collision box is set in the entity JSON (`hitboxSize`): 0.8 wide and 0.4 high for both adults, to fit the
 adult model, and 0.4 by 0.3 for the baby. The jump planner uses it,

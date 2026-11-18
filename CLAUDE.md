@@ -196,8 +196,13 @@ blending, interpolation between server ticks, and anything that needs a real `IP
   faces. The entity, block and item JSON map those codes to texture paths.
 - With `"autoUnwrap": false` on an element and `"autoUv": false` on a face, the editor keeps hand-set UVs.
 - Both adult sexes use `male.json`, `male.png` and `male2.png` (names kept for the author's editor project). The
-  female's smaller pedipalps come from `elementScalesByType` in the adult JSON, applied in
-  `EntityBehaviorJumpingSpider.OnTesselation` (client).
+  female's thinner pedipalps come from `elementScalesByType` in the adult JSON, applied in
+  `EntityBehaviorJumpingSpider.OnTesselation` (client). A value is one number (uniform `ScaleX/Y/Z`, children
+  scaled along) or `[x, y, z]` in the element's own box axes (`Logic/BoxReshape` moves `From`/`To` toward the
+  rotation origin and moves the children to stay attached; children are listed separately).
+- Never put a non-uniform `ScaleX/Y/Z` on an element whose children rotate: mesh builder and animator both do
+  `T(origin) * R * S * T(from - origin)` (animations with no `version` field use that branch), so a parent's scale
+  acts after a child's rotation and skews it. Change the box instead. Uniform scales are safe.
 - A loaded entity shape is one object per file, shared by every entity of every type that uses it. A behavior's
   `OnTesselation` that changes it must clone it and set `shapeIsCloned` (the game then builds the mesh and a
   per-entity animator from the clone), and after changing an element's scale or position clear

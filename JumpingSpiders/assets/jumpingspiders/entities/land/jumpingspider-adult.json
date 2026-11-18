@@ -71,15 +71,28 @@
 			// sexes differently from the one shared model.
 			{
 				code: "jumpingspiders.spider",
-				// Model elements drawn at a different size than modelled, per sex: element name (as in the model
-				// editor) to a scale (1 = as modelled, 0.5 = half size). The element shrinks toward its rotation
-				// origin (the joint it turns around), its child elements shrink with it, and the animations still
-				// move it. One number per element: X, Y and Z are scaled alike. A name the model does not have is
-				// reported as a warning in the client log. The server never draws the model and does not need this.
+				// Model elements drawn at a different size or shape than modelled, per sex: element name (exactly as
+				// in the model editor) to either
+				// - one number, a uniform scale (1 = as modelled, 0.5 = half size): the element shrinks toward its
+				//   rotation origin (the joint it turns around), its child elements and its keyframe offsets shrink
+				//   with it; or
+				// - [x, y, z], one factor per axis of the element's own box: the X, Y and Z of the element's Size in
+				//   the model editor, whatever the element's rotation. The box shrinks toward its rotation origin on
+				//   each axis. Only this element changes: its children keep their size and stay attached at their
+				//   joints, so list each child you want changed too, in its own axes.
+				// The animations still move every listed element. A name the model does not have is reported as a
+				// warning in the client log. The server never draws the model and does not need this.
 				elementScalesByType: {
-					// The female's pedipalps (each with its child PedipalpLB / PedipalpRB) are smaller than the male's.
-					// 0.6 is a placeholder value: tune it by looking at the spider in game.
-					"*-female": { "PedipalpL": 0.6, "PedipalpR": 0.6 },
+					// The female's pedipalps are thinner than the male's and just as long. In both parts of each
+					// pedipalp, X is the length (PedipalpL/R 2.1, PedipalpLB/RB 1.5 in the editor) and Y and Z are the
+					// thickness (0.8 x 0.8 and 0.7 x 0.6). So [1, 0.6, 0.6] keeps the length and makes them 0.6 as
+					// thick. The 0.6s are placeholder values: tune them by looking at the spider in game.
+					"*-female": {
+						"PedipalpL": [1, 0.6, 0.6],
+						"PedipalpLB": [1, 0.6, 0.6],
+						"PedipalpR": [1, 0.6, 0.6],
+						"PedipalpRB": [1, 0.6, 0.6]
+					},
 					// The male is drawn as modelled.
 					"*": {}
 				}

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
 using Vintagestory.API.Config;
@@ -32,8 +34,9 @@ namespace JumpingSpiders;
 /// - OnEntityDeath: a spider that dies while held still (in a ceiling hammock's cradle, or against a wall while it
 ///   builds) is let go and no longer asleep; its AI tasks, which would do that, stop running at death.
 /// - Info text: wild or domesticated, hungry or sated, asleep.
-/// - Per-sex model tweaks (client): both adult sexes share one model file, and OnTesselation scales the elements the
-///   entity JSON lists in "elementScalesByType" (the female's smaller pedipalps). See ElementScales.
+/// - Per-sex model tweaks (client): both adult sexes share one model file, and OnTesselation scales or reshapes the
+///   elements the entity JSON lists in "elementScalesByType" (the female's thinner pedipalps). See ElementScales and
+///   BoxReshape.
 /// </summary>
 public class EntityBehaviorJumpingSpider : EntityBehavior
 {
@@ -67,8 +70,8 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
     /// </summary>
     private const string ElementScalesKey = "elementScales";
 
-    // Model elements to draw at a different size than modelled, from the JSON. Empty on the server (the server
-    // behavior list has no table) and for the male.
+    // Model elements to draw at a different size or shape than modelled, from the JSON. Empty on the server (the
+    // server behavior list has no table) and for the male.
     private readonly ElementScales elementScales = new ElementScales();
 
     // So a misspelled element name is reported once per spider, not every time its mesh is rebuilt.
@@ -352,8 +355,8 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
 
     // ---------------- Model: per-sex element scales ----------------
 
-    // Reads "elementScales" ({ "ElementName": scale, ... }) from this behavior's JSON. Bad entries are skipped
-    // with a warning, so a typo in the JSON never stops the spider from loading.
+    // Reads "elementScales" ({ "ElementName": scale or [x, y, z], ... }) from this behavior's JSON. Bad entries are
+    // skipped with a warning, so a typo in the JSON never stops the spider from loading.
     private void ReadElementScales(JsonObject attributes)
     {
         if (attributes == null || !attributes[ElementScalesKey].Exists)
@@ -361,30 +364,54 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
             return;
         }
 
-        Dictionary<string, double> table;
-        try
-        {
-            table = attributes[ElementScalesKey].AsObject<Dictionary<string, double>>();
-        }
-        catch (Exception e)
-        {
-            entity.World.Logger.Warning("[jumpingspiders] {0}: \"{1}\" must map element names to numbers; ignored ({2})",
-                entity.Code, ElementScalesKey, e.Message);
-            return;
-        }
+        // JsonObject wraps a token of the Newtonsoft JSON library, which the game uses to read its JSON files.
+        JObject table = attributes[ElementScalesKey].Token as JObject;
         if (table == null)
         {
+            entity.World.Logger.Warning("[jumpingspiders] {0}: \"{1}\" must map element names to a number or to [x, y, z]; ignored",
+                entity.Code, ElementScalesKey);
             return;
         }
 
-        foreach (KeyValuePair<string, double> entry in table)
+        foreach (JProperty entry in table.Properties())
         {
-            if (!elementScales.Set(entry.Key, entry.Value))
+            double[] numbers = ReadNumbers(entry.Value);
+            if (!elementScales.SetFromNumbers(entry.Name, numbers))
             {
-                entity.World.Logger.Warning("[jumpingspiders] {0}: element scale {1} = {2} ignored (it must be from {3} to {4})",
-                    entity.Code, entry.Key, entry.Value, ElementScales.MinScale, ElementScales.MaxScale);
+                entity.World.Logger.Warning("[jumpingspiders] {0}: element scale {1} = {2} ignored (it must be one number or [x, y, z], each from {3} to {4})",
+                    entity.Code, entry.Name, entry.Value.ToString(Formatting.None), ElementScales.MinScale, ElementScales.MaxScale);
             }
         }
+    }
+
+    // The numbers in one table value: a single number gives one, an array of numbers gives them all. Anything else
+    // (text, an array holding something other than numbers) gives null, which ElementScales refuses.
+    private static double[] ReadNumbers(JToken value)
+    {
+        if (IsNumber(value))
+        {
+            return new double[] { (double)value };
+        }
+        JArray array = value as JArray;
+        if (array == null)
+        {
+            return null;
+        }
+        double[] numbers = new double[array.Count];
+        for (int i = 0; i < array.Count; i++)
+        {
+            if (!IsNumber(array[i]))
+            {
+                return null;
+            }
+            numbers[i] = (double)array[i];
+        }
+        return numbers;
+    }
+
+    private static bool IsNumber(JToken value)
+    {
+        return value != null && (value.Type == JTokenType.Float || value.Type == JTokenType.Integer);
     }
 
     /// <summary>
@@ -393,7 +420,7 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
     /// file, and it is shared: the game loads each shape file once and every entity of every type that uses that
     /// file (here both adult sexes) gets the same object. So the shape is copied before it is changed, and
     /// shapeIsCloned tells the game it now holds a per-entity copy; the game then builds the mesh and this spider's
-    /// animator from the copy, so the animations move the scaled parts too.
+    /// animator from the copy, so the animations move the changed parts too.
     /// </summary>
     public override void OnTesselation(ref Shape entityShape, string shapePathForLogging, ref bool shapeIsCloned, ref string[] willDeleteElements)
     {
@@ -411,7 +438,7 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
         }
 
         HashSet<string> found = new HashSet<string>(StringComparer.Ordinal);
-        ScaleElements(entityShape.Elements, found);
+        ResizeElements(entityShape.Elements, found);
 
         if (!missingElementsReported)
         {
@@ -419,16 +446,20 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
             if (missing.Count > 0)
             {
                 missingElementsReported = true;
-                entity.World.Logger.Warning("[jumpingspiders] {0}: the shape {1} has no element named {2}, so it cannot be scaled (see elementScalesByType in the entity JSON)",
+                entity.World.Logger.Warning("[jumpingspiders] {0}: the shape {1} has no element named {2}, so it cannot be resized (see elementScalesByType in the entity JSON)",
                     entity.Code, shapePathForLogging, string.Join(", ", missing));
             }
         }
     }
 
-    // Walks the element tree. A listed element gets its scale multiplied by the JSON's number; its children are
-    // scaled along with it by the game (a child is placed inside its parent), so they need no entry of their own.
-    // A child that is listed too gets its own number on top of its parent's.
-    private void ScaleElements(ShapeElement[] elements, HashSet<string> found)
+    // Walks the element tree, parents before children (a reshaped parent moves its children before they are
+    // reshaped themselves).
+    // - A uniform number multiplies the element's scale. Its children are scaled along with it by the game (a child
+    //   is placed inside its parent), so they need no entry of their own; a child that is listed too gets its own
+    //   number on top of its parent's.
+    // - Per-axis factors reshape the element's box (see BoxReshape). The children keep their size and are moved to
+    //   stay attached; a child that is listed too is reshaped in its own axes.
+    private void ResizeElements(ShapeElement[] elements, HashSet<string> found)
     {
         if (elements == null)
         {
@@ -438,6 +469,7 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
         {
             ShapeElement element = elements[i];
             double factor;
+            double[] boxFactors;
             if (elementScales.TryGetScale(element.Name, out factor))
             {
                 found.Add(element.Name);
@@ -449,7 +481,50 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
                 // again from the new scale when it loads the animator. Without this the parts would be scaled twice.
                 ClearInverseTransforms(element);
             }
-            ScaleElements(element.Children, found);
+            else if (elementScales.TryGetBoxFactors(element.Name, out boxFactors))
+            {
+                found.Add(element.Name);
+                ReshapeBox(element, boxFactors);
+                // The resting position changed for the element and its moved children, as above.
+                ClearInverseTransforms(element);
+            }
+            ResizeElements(element.Children, found);
+        }
+    }
+
+    // Moves the element's From and To toward its rotation origin by the factors, per axis of the element's own box,
+    // and moves each direct child (its From, To and rotation origin) so its joint keeps its place on the new box.
+    // Grandchildren are placed from the child's From, so they move with the child. New arrays are assigned rather
+    // than the old ones changed, so nothing that might share an array with the loaded shape is touched.
+    private static void ReshapeBox(ShapeElement element, double[] factors)
+    {
+        if (element.From == null || element.To == null)
+        {
+            return;
+        }
+        element.From = BoxReshape.ReshapeCorner(element.From, element.RotationOrigin, factors);
+        element.To = BoxReshape.ReshapeCorner(element.To, element.RotationOrigin, factors);
+
+        if (element.Children == null)
+        {
+            return;
+        }
+        for (int i = 0; i < element.Children.Length; i++)
+        {
+            ShapeElement child = element.Children[i];
+            double[] shift = BoxReshape.ChildShift(child.RotationOrigin, factors);
+            if (child.From != null)
+            {
+                child.From = BoxReshape.Add(child.From, shift);
+            }
+            if (child.To != null)
+            {
+                child.To = BoxReshape.Add(child.To, shift);
+            }
+            if (child.RotationOrigin != null)
+            {
+                child.RotationOrigin = BoxReshape.Add(child.RotationOrigin, shift);
+            }
         }
     }
 
