@@ -86,7 +86,6 @@ public class AiTaskSpiderSleep : AiTaskBase
     private readonly int checkIntervalMs;
     private readonly float asleepPriorityForCancel;
     private readonly string sleepAnimation;
-    private readonly string walkAnimation;
     private readonly float moveSpeed;
     private readonly int launchSpotSearchRadius;
     private readonly int maxLaunchSpotPlanChecks;
@@ -105,14 +104,12 @@ public class AiTaskSpiderSleep : AiTaskBase
     public BlockPos HammockPos;
 
     private readonly JumpRunner runner;
+    private readonly Walker walker;
     private LaunchSpotFinder launchSpotFinder;
     private long nextStartCheckMs;
     private long nextWakeCheckMs;
     private long travelDeadlineMs;
     private int travelAttempts;
-    private bool walking;
-    private bool walkArrived;
-    private bool walkFailed;
     private bool hurt;
     private bool stayingUp;    // only so the debug log says when staying up begins and ends
     private bool heldInCradle; // lifted into a ceiling hammock's cradle, physics paused (HoldStill)
@@ -134,7 +131,6 @@ public class AiTaskSpiderSleep : AiTaskBase
         asleepPriorityForCancel = taskConfig["asleepPriorityForCancel"].AsFloat(2.6f);
         // Animation codes from the entity JSON; "" = none.
         sleepAnimation = SpiderTaskUtil.ReadAnimation(taskConfig, "sleepAnimation", "sleep");
-        walkAnimation = SpiderTaskUtil.ReadAnimation(taskConfig, "walkAnimation", "walk");
         // Walking speed to a launch spot (vanilla movespeed units).
         moveSpeed = taskConfig["movespeed"].AsFloat(0.02f);
         // Blocks: how far around the hammock (horizontally) it looks for a spot to jump up from.
@@ -157,6 +153,9 @@ public class AiTaskSpiderSleep : AiTaskBase
         // windUpMinMs, windUpMaxMs, pauseBetweenJumpsMs, turnSpeedDegPerSec, windUpAnimation, jumpAnimation (see
         // JumpRunner.ReadSettings).
         runner.ReadSettings(taskConfig);
+
+        walker = new Walker(entity, pathTraverser);
+        walker.Animation = SpiderTaskUtil.ReadAnimation(taskConfig, "walkAnimation", "walk");
     }
 
     /// <summary>Uninterruptible in the air; hard to interrupt while asleep (see asleepPriorityForCancel).</summary>
@@ -301,7 +300,6 @@ public class AiTaskSpiderSleep : AiTaskBase
         }
         hurt = false;
         travelAttempts = 0;
-        walking = false;
         launchSpotFinder = null;
         HammockPos = null;
         Phase = SleepPhase.None;
@@ -495,14 +493,14 @@ public class AiTaskSpiderSleep : AiTaskBase
             GiveUpHammock("took too long");
             return true;
         }
-        if (walkFailed)
+        if (walker.Failed)
         {
             GiveUpHammock("could not walk to the launch spot");
             return true;
         }
-        if (walkArrived && entity.OnGround)
+        if (walker.Arrived && entity.OnGround)
         {
-            StopWalkingAnimation();
+            walker.StopAnimation();
             StartTravel();
         }
         return true;
@@ -535,8 +533,7 @@ public class AiTaskSpiderSleep : AiTaskBase
     public override void FinishExecute(bool cancelled)
     {
         runner.Stop();
-        pathTraverser.Stop();
-        StopWalkingAnimation();
+        walker.Stop();
         WakeUp();
         if (napping)
         {
@@ -665,18 +662,12 @@ public class AiTaskSpiderSleep : AiTaskBase
     // Walks (the game's pathfinder) to the launch spot; arriving there leads to StartTravel again.
     private void StartWalk(JumpPlanNode spot)
     {
-        walkArrived = false;
-        walkFailed = false;
-        pathTraverser.Stop();
-        bool started = pathTraverser.NavigateTo_Async(new Vec3d(spot.FeetX, spot.FeetY, spot.FeetZ), moveSpeed, WalkStopDistance,
-            OnWalkArrived, OnWalkFailed, OnWalkFailed);
+        bool started = walker.WalkTo(new Vec3d(spot.FeetX, spot.FeetY, spot.FeetZ), moveSpeed, WalkStopDistance);
         if (!started)
         {
             GiveUpHammock("the pathfinder is busy");
             return;
         }
-        walking = true;
-        SpiderTaskUtil.StartAnimation(entity, walkAnimation);
         Phase = SleepPhase.Walking;
         if (SpiderTaskUtil.IsDebugLogOn())
         {
@@ -709,8 +700,7 @@ public class AiTaskSpiderSleep : AiTaskBase
             SpiderTaskUtil.Log(entity, LogName, reason);
         }
         runner.Stop();
-        pathTraverser.Stop();
-        StopWalkingAnimation();
+        walker.Stop();
         Phase = SleepPhase.None;
         endNow = true;
     }
@@ -726,8 +716,7 @@ public class AiTaskSpiderSleep : AiTaskBase
     private void FallAsleep()
     {
         runner.Stop();
-        pathTraverser.Stop();
-        StopWalkingAnimation();
+        walker.Stop();
         SpiderTaskUtil.StopWalking(entity);
 
         if (HammockPos != null)
@@ -894,25 +883,5 @@ public class AiTaskSpiderSleep : AiTaskBase
         {
             hammock.Release(entity);
         }
-    }
-
-    private void StopWalkingAnimation()
-    {
-        if (walking)
-        {
-            walking = false;
-            SpiderTaskUtil.StopAnimation(entity, walkAnimation);
-        }
-    }
-
-    // Pathfinder callbacks (the game calls these from the traverser's tick).
-    private void OnWalkArrived()
-    {
-        walkArrived = true;
-    }
-
-    private void OnWalkFailed()
-    {
-        walkFailed = true;
     }
 }

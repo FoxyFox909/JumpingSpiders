@@ -65,7 +65,6 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
     private readonly int searchIntervalMs;
     private readonly float turnSpeedRadPerSec;
     private readonly string windUpAnimation;
-    private readonly string walkAnimation;
 
     // ---- State of the current attack ----
 
@@ -74,12 +73,11 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
 
     private readonly WindUp windUp;
     private readonly JumpRunner runner;
+    private readonly Walker walker;
     private long nextSearchMs;
     private long approachDeadlineMs;
     private long nextRepathMs;
     private long nextPounceCheckMs;
-    private bool approachFailed;
-    private bool walking;
     private bool hitDone;
     private int flightPointsChecked;
 
@@ -136,7 +134,6 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         turnSpeedRadPerSec = taskConfig["turnSpeedDegPerSec"].AsFloat(360) * (float)Math.PI / 180f;
         // Animation codes from the entity JSON; "" = none.
         windUpAnimation = SpiderTaskUtil.ReadAnimation(taskConfig, "windUpAnimation", "jumpwindup");
-        walkAnimation = SpiderTaskUtil.ReadAnimation(taskConfig, "walkAnimation", "walk");
 
         windUp = new WindUp(entity);
         runner = new JumpRunner(entity);
@@ -144,6 +141,12 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         // The pounce is one jump with the wind-up above, so the runner itself does no wind-up.
         runner.WindUpMinSeconds = 0;
         runner.WindUpMaxSeconds = 0;
+
+        walker = new Walker(entity, pathTraverser);
+        walker.Animation = SpiderTaskUtil.ReadAnimation(taskConfig, "walkAnimation", "walk");
+        // The path is re-aimed at the moving target every repathIntervalMs: reaching the end of one only stops the
+        // animation until the next. Being stuck or finding no path ends the attack (ContinueApproach).
+        walker.StopAnimationOnArrival = true;
     }
 
     /// <summary>Nothing may interrupt the spider while it is in the air.</summary>
@@ -281,8 +284,7 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         approachDeadlineMs = now + maxApproachMs;
         nextRepathMs = 0;
         nextPounceCheckMs = 0;
-        approachFailed = false;
-        walking = false;
+        walker.ClearOutcome();
         hitDone = false;
         if (SpiderTaskUtil.IsDebugLogOn())
         {
@@ -328,7 +330,7 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
     private bool ContinueApproach(double distance)
     {
         long now = entity.World.ElapsedMilliseconds;
-        if (approachFailed)
+        if (walker.Failed)
         {
             if (SpiderTaskUtil.IsDebugLogOn())
             {
@@ -365,7 +367,7 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
 
     private void BeginWindUp()
     {
-        StopWalkingToTarget();
+        walker.Stop();
         windUp.Begin(windUpMinMs / 1000f, windUpMaxMs / 1000f, windUpAnimation, entity.World.Rand);
         Phase = AttackPhase.WindUp;
         if (SpiderTaskUtil.IsDebugLogOn())
@@ -452,7 +454,7 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
     {
         windUp.Cancel();
         runner.Stop();
-        StopWalkingToTarget();
+        walker.Stop();
         if (cancelled)
         {
             if (SpiderTaskUtil.IsDebugLogOn())
@@ -589,42 +591,6 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
 
     private void WalkTowardsTarget()
     {
-        bool started = pathTraverser.NavigateTo_Async(targetEntity.Pos.XYZ, moveSpeed, ApproachStopDistance,
-            OnApproachGoalReached, OnApproachStuck, OnApproachNoPath);
-        if (started && !walking)
-        {
-            walking = true;
-            SpiderTaskUtil.StartAnimation(entity, walkAnimation);
-        }
-    }
-
-    private void StopWalkingToTarget()
-    {
-        pathTraverser.Stop();
-        if (walking)
-        {
-            walking = false;
-            SpiderTaskUtil.StopAnimation(entity, walkAnimation);
-        }
-    }
-
-    // Pathfinder callbacks (the game calls these from the traverser's tick).
-    private void OnApproachGoalReached()
-    {
-        if (walking)
-        {
-            walking = false;
-            SpiderTaskUtil.StopAnimation(entity, walkAnimation);
-        }
-    }
-
-    private void OnApproachStuck()
-    {
-        approachFailed = true;
-    }
-
-    private void OnApproachNoPath()
-    {
-        approachFailed = true;
+        walker.NavigateTo(targetEntity.Pos.XYZ, moveSpeed, ApproachStopDistance);
     }
 }

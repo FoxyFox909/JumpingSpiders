@@ -24,16 +24,6 @@ public class NearbyStandSpotTests
     }
 
     [Fact]
-    public void HeightOffsetsGoOutwardsDownFirst()
-    {
-        Assert.Equal(0, NearbyStandSpot.HeightOffset(0));
-        Assert.Equal(-1, NearbyStandSpot.HeightOffset(1));
-        Assert.Equal(1, NearbyStandSpot.HeightOffset(2));
-        Assert.Equal(-2, NearbyStandSpot.HeightOffset(3));
-        Assert.Equal(2, NearbyStandSpot.HeightOffset(4));
-    }
-
-    [Fact]
     public void OnFlatGroundTheSpotIsInTheRingOnTheGround()
     {
         TestBlockWorld world = FlatWorld();
@@ -88,5 +78,28 @@ public class NearbyStandSpotTests
         world.Fill(-1, 0, -1, 1, 0, 1);
         Assert.Null(NearbyStandSpot.Find(world, 0.5, 1, 0.5, 2, 5, 3, new Random(4)));
         Assert.NotNull(NearbyStandSpot.Find(world, 0.5, 1, 0.5, 1, 5, 3, new Random(4)));
+    }
+
+    [Fact]
+    public void FindsTheSameSpotsAsBeforeTheSharedColumnScan()
+    {
+        // Terraces 0 to 3 blocks high in strips three blocks wide along x, the player at y = 2.3. The spots are the ones
+        // NearbyStandSpot found with these seeds before it used StandSpotScan.FirstInColumn.
+        TestBlockWorld world = FlatWorld();
+        for (int x = -12; x <= 12; x++)
+        {
+            int height = ((x + 12) / 3) % 4;
+            if (height > 0)
+            {
+                world.Fill(x, 1, -12, x, height, 12);
+            }
+        }
+        string[] expected = new string[] { "-2,4,0", "-2,4,-3", "3,2,-2", "-4,3,2", "-2,4,-2" };
+        for (int seed = 1; seed <= 5; seed++)
+        {
+            StandSpot spot = NearbyStandSpot.Find(world, 0.5, 2.3, 0.5, 2, 5, 2, new Random(seed));
+            Assert.Equal(expected[seed - 1], spot.CellX + "," + spot.CellY + "," + spot.CellZ);
+            Assert.Equal(spot.CellY, spot.FeetY, 9);
+        }
     }
 }

@@ -45,14 +45,13 @@ public class AiTaskSpiderJumpFlee : AiTaskBaseTargetable
     private readonly int replanIntervalMs;
     private readonly float moveSpeed;
     private readonly int searchIntervalMs;
-    private readonly string runAnimation;
 
     // ---- State of the current flee session ----
     private readonly JumpRunner runner;
+    private readonly Walker walker;
     private long nextSearchMs;
     private long fleeUntilMs;
     private long nextJumpMs;
-    private bool running;
     private bool wasJumping;
 
     /// <summary>How many flee jumps this session made (for the debug log).</summary>
@@ -94,14 +93,19 @@ public class AiTaskSpiderJumpFlee : AiTaskBaseTargetable
         moveSpeed = taskConfig["movespeed"].AsFloat(0.04f);
         // Milliseconds: how often it looks for a threat while not fleeing.
         searchIntervalMs = taskConfig["searchIntervalMs"].AsInt(250);
-        // Animation codes from the entity JSON; "" = none.
-        runAnimation = SpiderTaskUtil.ReadAnimation(taskConfig, "runAnimation", "run");
 
         runner = new JumpRunner(entity);
         runner.JumpAnimation = SpiderTaskUtil.ReadAnimation(taskConfig, "jumpAnimation", "jump");
         // Fleeing jumps have no wind-up: the spider leaves at once.
         runner.WindUpMinSeconds = 0;
         runner.WindUpMaxSeconds = 0;
+
+        walker = new Walker(entity, pathTraverser);
+        // Animation code from the entity JSON; "" = none.
+        walker.Animation = SpiderTaskUtil.ReadAnimation(taskConfig, "runAnimation", "run");
+        // Arrived or stuck: the run animation stops; the next plan or run follows after replanIntervalMs.
+        walker.StopAnimationOnArrival = true;
+        walker.StopAnimationOnFailure = true;
     }
 
     /// <summary>Nothing may interrupt the spider while it is in the air.</summary>
@@ -192,7 +196,6 @@ public class AiTaskSpiderJumpFlee : AiTaskBaseTargetable
         base.StartExecute();
         fleeUntilMs = entity.World.ElapsedMilliseconds + fleeDurationMs;
         nextJumpMs = 0;
-        running = false;
         wasJumping = false;
         JumpsThisSession = 0;
         if (SpiderTaskUtil.IsDebugLogOn())
@@ -263,7 +266,7 @@ public class AiTaskSpiderJumpFlee : AiTaskBaseTargetable
         List<JumpStep> plan = PlanFleeJump(distance);
         if (plan != null)
         {
-            StopRunning();
+            walker.Stop();
             runner.Start(plan);
             wasJumping = true;
             JumpsThisSession++;
@@ -277,7 +280,7 @@ public class AiTaskSpiderJumpFlee : AiTaskBaseTargetable
     public override void FinishExecute(bool cancelled)
     {
         runner.Stop();
-        StopRunning();
+        walker.Stop();
         if (cancelled)
         {
             if (SpiderTaskUtil.IsDebugLogOn())
@@ -309,31 +312,6 @@ public class AiTaskSpiderJumpFlee : AiTaskBaseTargetable
         double awayZ;
         FleeDirection.AwayPoint(entity.Pos.X, entity.Pos.Z, targetEntity.Pos.X, targetEntity.Pos.Z, safeDistance,
             entity.Pos.Yaw, out awayX, out awayZ);
-        pathTraverser.WalkTowards(new Vec3d(awayX, entity.Pos.Y, awayZ), moveSpeed, RunStopDistance, OnRunEnded, OnRunEnded);
-        if (!running)
-        {
-            running = true;
-            SpiderTaskUtil.StartAnimation(entity, runAnimation);
-        }
-    }
-
-    private void StopRunning()
-    {
-        pathTraverser.Stop();
-        if (running)
-        {
-            running = false;
-            SpiderTaskUtil.StopAnimation(entity, runAnimation);
-        }
-    }
-
-    // Pathfinder callback for both "arrived" and "stuck": stop the run animation; the next plan or run follows.
-    private void OnRunEnded()
-    {
-        if (running)
-        {
-            running = false;
-            SpiderTaskUtil.StopAnimation(entity, runAnimation);
-        }
+        walker.RunTowards(new Vec3d(awayX, entity.Pos.Y, awayZ), moveSpeed, RunStopDistance);
     }
 }

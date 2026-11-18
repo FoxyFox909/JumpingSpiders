@@ -301,12 +301,10 @@ public static class WildHammockSites
                 BlockFacing outward = BlockFacing.HORIZONTALS[side];
                 BlockFacing towardTrunk = outward.Opposite;
                 BlockPos cell = new BlockPos(trunk.X + outward.Normali.X, y, trunk.Z + outward.Normali.Z, 0);
-                BlockSilkHammock variant = BlockSilkHammock.GetVariant(world, towardTrunk);
-                if (variant == null || !HammockBuilder.IsCellFreeForHammock(world, cell, variant))
-                {
-                    continue;
-                }
-                if (!BlockSilkHammock.IsSupportedFrom(blockAccessor, variant, cell, towardTrunk))
+                // Unlike a spider's own building, a wall hammock under a solid block (a branch, leaves) is allowed:
+                // MarkReachable tests with real jumps whether a spider gets in.
+                BlockFacing[] onlyTowardTrunk = new BlockFacing[] { towardTrunk };
+                if (HammockBuilder.FindSupportFacing(world, cell, onlyTowardTrunk, false) == null)
                 {
                     continue;
                 }

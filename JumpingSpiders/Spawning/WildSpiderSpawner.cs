@@ -474,23 +474,22 @@ public static class WildSpiderSpawner
                 continue;
             }
             int groundY = world.BlockAccessor.GetTerrainMapheightAt(column) + 1;
-            for (int y = groundY + GroundSearchUp; y >= groundY - GroundSearchDown; y--)
+            // The highest cell in the column the spider can stand in, near the generated ground.
+            StandSpot spot = StandSpotScan.FirstInColumn(jumpWorld, x, z, groundY, GroundSearchUp, GroundSearchDown, false);
+            if (spot == null)
             {
-                if (!jumpWorld.CanStandAt(x, y, z))
-                {
-                    continue;
-                }
-                Vec3d feet = new Vec3d(x + 0.5, jumpWorld.GetStandHeight(x, y, z), z + 0.5);
-                if (Math.Abs(feet.Y - around.Y) > maxHeightDifference)
-                {
-                    break;
-                }
-                if (request.CheckPlayerDistance && !PlayerDistanceOk(request.PlayerPositions, feet, config))
-                {
-                    break;
-                }
-                return feet;
+                continue;
             }
+            Vec3d feet = new Vec3d(spot.FeetX, spot.FeetY, spot.FeetZ);
+            if (Math.Abs(feet.Y - around.Y) > maxHeightDifference)
+            {
+                continue;
+            }
+            if (request.CheckPlayerDistance && !PlayerDistanceOk(request.PlayerPositions, feet, config))
+            {
+                continue;
+            }
+            return feet;
         }
         return null;
     }

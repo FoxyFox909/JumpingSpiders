@@ -176,4 +176,43 @@ public class BuildStanceFinderTests
             Assert.False(spots[i].CellX == clinging[0].CellX && spots[i].CellZ == clinging[0].CellZ);
         }
     }
+
+    [Fact]
+    public void LaunchSpotsAreTheSameAsBeforeTheSharedScan()
+    {
+        // The wall world with a step one block up, a terrace two blocks up and a slab on the floor. The spots are the
+        // ones FindLaunchSpots found before it used StandSpotScan.InRing (the order of equally distant spots included).
+        TestBlockWorld world = FloorAndWall();
+        world.Fill(-1, 0, -8, 0, 0, -1);
+        world.Fill(-1, 1, 1, 2, 2, 8);
+        world.SetBlock(1, 0, 0, 0.5);
+        List<BuildStance> clinging = BuildStanceFinder.FindClinging(world, world, 2, 4, 0, Range, HalfWidth, Height, 0.5, 0, 0.5);
+        Assert.Equal("0,2,0", clinging[0].CellX + "," + clinging[0].CellY + "," + clinging[0].CellZ);
+
+        List<BuildStance> spots = BuildStanceFinder.FindLaunchSpots(world, clinging[0], new JumpLimits(), 3, 1, 2, 0.5, 0, 0.5);
+        Assert.Equal(39, spots.Count);
+        string[] expectedFirst = new string[] { "-1,0,0", "0,1,-1", "1,0,1", "1,0,-1", "-1,0,1", "-1,1,-1", "0,0,2", "-2,0,0", "2,0,0" };
+        for (int i = 0; i < expectedFirst.Length; i++)
+        {
+            Assert.Equal(expectedFirst[i], spots[i].CellX + "," + spots[i].CellY + "," + spots[i].CellZ);
+        }
+        Assert.Equal("-3,0,-3", spots[38].CellX + "," + spots[38].CellY + "," + spots[38].CellZ);
+
+        // Shorter jumps: at most 2 up, 1 down and 2.5 across, from heights -2 to 3. The floor (2.55 below the clinging
+        // spot) is out; the terrace top (0.45 above it) is in.
+        JumpLimits limits = new JumpLimits();
+        limits.MaxJumpUp = 2;
+        limits.MaxJumpDown = 1;
+        limits.MaxJumpHorizontal = 2.5;
+        List<BuildStance> shortSpots = BuildStanceFinder.FindLaunchSpots(world, clinging[0], limits, 3, 3, 2, 0.5, 0, 0.5);
+        string[] expectedShort = new string[] { "0,1,-1", "-1,1,-1", "0,1,-2", "-1,1,-2", "-1,3,1", "1,3,1", "0,3,2", "-1,3,2", "1,3,2", "2,3,1" };
+        double[] expectedDistance = new double[] { 1.4142, 1.7321, 2.2361, 2.4495, 3.3166, 3.3166, 3.6056, 3.7417, 3.7417, 3.7417 };
+        Assert.Equal(expectedShort.Length, shortSpots.Count);
+        for (int i = 0; i < expectedShort.Length; i++)
+        {
+            Assert.Equal(expectedShort[i], shortSpots[i].CellX + "," + shortSpots[i].CellY + "," + shortSpots[i].CellZ);
+            Assert.Equal(expectedDistance[i], shortSpots[i].DistanceFromSpider, 4);
+            Assert.False(shortSpots[i].Clinging);
+        }
+    }
 }

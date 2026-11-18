@@ -10,7 +10,8 @@ namespace JumpingSpiders;
 ///
 /// How: every standable cell within searchRadius blocks (horizontally) of the goal, not above it, and at a height the
 /// spider can walk to (at most maxStepUp blocks above its feet and maxStepDown below, since the pathfinder only steps
-/// up one block at a time) is a candidate. Whether a path really exists is left to the pathfinder.
+/// up one block at a time) is a candidate (StandSpotScan.InRing, the scan BuildStanceFinder.FindLaunchSpots uses too).
+/// Whether a path really exists is left to the pathfinder.
 /// Candidates are checked best first, each with one full JumpPlanner.PlanJumps search, at most maxPlanChecks of them,
 /// because each search is the expensive part. "Best" means little walking, and standing a comfortable distance from
 /// the goal (about half a jump's reach, horizontally): right at the foot of a tree or pillar the trunk itself is in the
@@ -43,7 +44,7 @@ public class LaunchSpotFinder
     private readonly int goalZ;
     private readonly JumpLimits limits;
     private readonly int maxPlanChecks;
-    private readonly List<JumpPlanNode> candidates = new List<JumpPlanNode>();
+    private readonly List<StandSpot> candidates = new List<StandSpot>();
     private readonly List<double> scores = new List<double>();
     private readonly Dictionary<long, JumpStep> jumpsToGoal = new Dictionary<long, JumpStep>();
     private int checksDone;
@@ -88,47 +89,27 @@ public class LaunchSpotFinder
         int lowestY = Math.Max(goalY - maxBelow, spiderCellY - maxStepDown);
         int highestY = Math.Min(goalY, spiderCellY + maxStepUp);
 
-        for (int x = goalX - searchRadius; x <= goalX + searchRadius; x++)
+        // The columns whose centre is within searchRadius of the goal column's centre.
+        List<StandSpot> spots = StandSpotScan.InRing(world, goalX, goalZ, searchRadius, goalX + 0.5, goalZ + 0.5,
+            0, searchRadius, lowestY, highestY);
+        for (int i = 0; i < spots.Count; i++)
         {
-            for (int z = goalZ - searchRadius; z <= goalZ + searchRadius; z++)
+            StandSpot spot = spots[i];
+            if (spot.CellX == goalX && spot.CellY == goalY && spot.CellZ == goalZ)
             {
-                int dxGoal = x - goalX;
-                int dzGoal = z - goalZ;
-                if (dxGoal * dxGoal + dzGoal * dzGoal > searchRadius * searchRadius)
-                {
-                    continue;
-                }
-                for (int y = lowestY; y <= highestY; y++)
-                {
-                    if (x == goalX && y == goalY && z == goalZ)
-                    {
-                        continue;
-                    }
-                    if (x == spiderCellX && y == spiderCellY && z == spiderCellZ)
-                    {
-                        continue;
-                    }
-                    if (!world.CanStandAt(x, y, z))
-                    {
-                        continue;
-                    }
-                    JumpPlanNode node = new JumpPlanNode();
-                    node.CellX = x;
-                    node.CellY = y;
-                    node.CellZ = z;
-                    node.FeetX = x + 0.5;
-                    node.FeetY = world.GetStandHeight(x, y, z);
-                    node.FeetZ = z + 0.5;
-                    node.AtCellCentre = true;
-                    candidates.Add(node);
-                    double dxToGoal = node.FeetX - (goalX + 0.5);
-                    double dzToGoal = node.FeetZ - (goalZ + 0.5);
-                    double fromGoal = Math.Sqrt(dxToGoal * dxToGoal + dzToGoal * dzToGoal);
-                    double score = JumpPlanner.Distance(node.FeetX, node.FeetY, node.FeetZ, spiderX, spiderY, spiderZ)
-                        + ComfortWeight * Math.Abs(fromGoal - limits.MaxJumpHorizontal * ComfortableReachFraction);
-                    scores.Add(score);
-                }
+                continue;
             }
+            if (spot.CellX == spiderCellX && spot.CellY == spiderCellY && spot.CellZ == spiderCellZ)
+            {
+                continue;
+            }
+            candidates.Add(spot);
+            double dxToGoal = spot.FeetX - (goalX + 0.5);
+            double dzToGoal = spot.FeetZ - (goalZ + 0.5);
+            double fromGoal = Math.Sqrt(dxToGoal * dxToGoal + dzToGoal * dzToGoal);
+            double score = JumpPlanner.Distance(spot.FeetX, spot.FeetY, spot.FeetZ, spiderX, spiderY, spiderZ)
+                + ComfortWeight * Math.Abs(fromGoal - limits.MaxJumpHorizontal * ComfortableReachFraction);
+            scores.Add(score);
         }
     }
 
@@ -148,7 +129,7 @@ public class LaunchSpotFinder
         checksDone++;
         // Best score first. A full sort is not needed: we only ever look at the first few.
         int best = IndexOfSmallest(scores);
-        JumpPlanNode candidate = candidates[best];
+        StandSpot candidate = candidates[best];
         candidates.RemoveAt(best);
         scores.RemoveAt(best);
 
@@ -156,7 +137,15 @@ public class LaunchSpotFinder
             goalX, goalY, goalZ, limits, rand, jumpsToGoal);
         if (plan != null)
         {
-            Found = candidate;
+            JumpPlanNode node = new JumpPlanNode();
+            node.CellX = candidate.CellX;
+            node.CellY = candidate.CellY;
+            node.CellZ = candidate.CellZ;
+            node.FeetX = candidate.FeetX;
+            node.FeetY = candidate.FeetY;
+            node.FeetZ = candidate.FeetZ;
+            node.AtCellCentre = true;
+            Found = node;
         }
     }
 

@@ -111,6 +111,25 @@ public class LaunchSpotFinderTests
     }
 
     [Fact]
+    public void FindsTheSameSpotsAsBeforeTheSharedScan()
+    {
+        // The spots LaunchSpotFinder found here before it used StandSpotScan.InRing.
+        TestBlockWorld world = PillarWorld();
+        JumpPlanNode fromFarAway = LaunchSpotFinder.Find(world, -9.5, 1, 0.5, 8, 8, 0, new JumpLimits(), 6, 1, 4, 4, new Random(1));
+        Assert.Equal(4, fromFarAway.CellX);
+        Assert.Equal(1, fromFarAway.CellY);
+        Assert.Equal(0, fromFarAway.CellZ);
+        Assert.Equal(4.5, fromFarAway.FeetX, 9);
+        Assert.Equal(1.0, fromFarAway.FeetY, 9);
+        Assert.Equal(0.5, fromFarAway.FeetZ, 9);
+        Assert.True(fromFarAway.AtCellCentre);
+        JumpPlanNode fromNearby = LaunchSpotFinder.Find(world, 5.5, 1, -1.5, 8, 8, 0, new JumpLimits(), 6, 1, 4, 12, new Random(1));
+        Assert.Equal(6, fromNearby.CellX);
+        Assert.Equal(1, fromNearby.CellY);
+        Assert.Equal(-2, fromNearby.CellZ);
+    }
+
+    [Fact]
     public void CheckNextDoesOneSearchAtATime()
     {
         TestBlockWorld world = TerracedWorldWithUnreachableGoal();

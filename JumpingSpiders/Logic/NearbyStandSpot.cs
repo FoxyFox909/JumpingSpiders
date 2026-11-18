@@ -9,8 +9,9 @@ namespace JumpingSpiders;
 ///
 /// The block columns whose centre is between minDistance and maxDistance (horizontally) from the point are tried in
 /// random order. In each column the cells nearest to the point's own height come first (the same level, one down,
-/// one up, two down, ...), so on a hillside or in a cave the spider stands at the player's level rather than on the
-/// surface far above or below. Pure logic on IJumpWorld, so the unit tests run it on hand-made block worlds.
+/// one up, two down, ...: StandSpotScan.FirstInColumn), so on a hillside or in a cave the spider stands at the
+/// player's level rather than on the surface far above or below. Pure logic on IJumpWorld, so the unit tests run it on
+/// hand-made block worlds.
 /// </summary>
 public static class NearbyStandSpot
 {
@@ -28,32 +29,14 @@ public static class NearbyStandSpot
         for (int i = 0; i < order.Length; i++)
         {
             StandSpot column = columns[order[i]];
-            for (int step = 0; step <= 2 * maxHeightDifference; step++)
+            StandSpot spot = StandSpotScan.FirstInColumn(world, column.CellX, column.CellZ, baseY, maxHeightDifference,
+                maxHeightDifference, true);
+            if (spot != null)
             {
-                int y = baseY + HeightOffset(step);
-                if (!world.CanStandAt(column.CellX, y, column.CellZ))
-                {
-                    continue;
-                }
-                column.CellY = y;
-                column.FeetX = column.CellX + 0.5;
-                column.FeetY = world.GetStandHeight(column.CellX, y, column.CellZ);
-                column.FeetZ = column.CellZ + 0.5;
-                return column;
+                return spot;
             }
         }
         return null;
-    }
-
-    /// <summary>The height offsets in the order they are tried: 0, -1, +1, -2, +2, ...</summary>
-    public static int HeightOffset(int step)
-    {
-        int distance = (step + 1) / 2;
-        if (step % 2 == 1)
-        {
-            return -distance;
-        }
-        return distance;
     }
 
     // One StandSpot (only CellX and CellZ set) per column whose centre is in the ring.

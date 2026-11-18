@@ -144,44 +144,32 @@ public static class BuildStanceFinder
     }
 
     /// <summary>
-    /// Cells the spider could walk to and jump from to reach a clinging spot: standable, within searchRadius blocks
-    /// (horizontally) of it but at least MinLaunchDistance away, no more than one jump below it, and at heights the
+    /// Cells the spider could walk to and jump from to reach a clinging spot: standable, in the columns within
+    /// searchRadius of its cell (on each axis) whose centre is MinLaunchDistance to one jump's reach
+    /// (JumpLimits.MaxJumpHorizontal) from it horizontally, no more than one jump below or above it, and at heights the
     /// pathfinder can walk to from the spider's feet cell (maxStepUp above, maxStepDown below). Nearest to the spider
-    /// first. Whether the jump works from there is for ClingJump.TryJump to say.
+    /// first. Whether the jump works from there is for ClingJump.TryJump to say. The scan is StandSpotScan.InRing, the
+    /// one LaunchSpotFinder uses too.
     /// </summary>
     public static List<BuildStance> FindLaunchSpots(IJumpWorld world, BuildStance cling, JumpLimits limits, int searchRadius,
         int maxStepUp, int maxStepDown, double spiderX, double spiderY, double spiderZ)
     {
         List<BuildStance> result = new List<BuildStance>();
         int spiderCellY = JumpPlanner.CellOfFeetY(spiderY);
-        for (int x = cling.CellX - searchRadius; x <= cling.CellX + searchRadius; x++)
+        List<StandSpot> cells = StandSpotScan.InRing(world, cling.CellX, cling.CellZ, searchRadius, cling.FeetX, cling.FeetZ,
+            MinLaunchDistance, limits.MaxJumpHorizontal, spiderCellY - maxStepDown, spiderCellY + maxStepUp);
+        for (int i = 0; i < cells.Count; i++)
         {
-            for (int z = cling.CellZ - searchRadius; z <= cling.CellZ + searchRadius; z++)
+            StandSpot cell = cells[i];
+            double feetY = cell.FeetY;
+            if (cling.FeetY - feetY > limits.MaxJumpUp || feetY - cling.FeetY > limits.MaxJumpDown)
             {
-                double dx = x + 0.5 - cling.FeetX;
-                double dz = z + 0.5 - cling.FeetZ;
-                double horizontal = Math.Sqrt(dx * dx + dz * dz);
-                if (horizontal < MinLaunchDistance || horizontal > limits.MaxJumpHorizontal)
-                {
-                    continue;
-                }
-                for (int y = spiderCellY - maxStepDown; y <= spiderCellY + maxStepUp; y++)
-                {
-                    if (!world.CanStandAt(x, y, z))
-                    {
-                        continue;
-                    }
-                    double feetY = world.GetStandHeight(x, y, z);
-                    if (cling.FeetY - feetY > limits.MaxJumpUp || feetY - cling.FeetY > limits.MaxJumpDown)
-                    {
-                        continue;
-                    }
-                    BuildStance spot = new BuildStance();
-                    spot.Clinging = false;
-                    SetCellAndFeet(spot, x, y, z, x + 0.5, feetY, z + 0.5, spiderX, spiderY, spiderZ);
-                    result.Add(spot);
-                }
+                continue;
             }
+            BuildStance spot = new BuildStance();
+            spot.Clinging = false;
+            SetCellAndFeet(spot, cell.CellX, cell.CellY, cell.CellZ, cell.FeetX, feetY, cell.FeetZ, spiderX, spiderY, spiderZ);
+            result.Add(spot);
         }
         result.Sort(CompareByDistance);
         return result;

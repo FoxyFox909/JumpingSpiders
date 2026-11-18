@@ -31,7 +31,8 @@ public static class HammockReachFinder
     /// <summary>
     /// Ground spots around a trunk: for every column whose distance from the trunk column is 1..radius blocks
     /// (on the larger axis), the highest cell between baseY + searchUp and baseY - searchDown that the spider can
-    /// stand in. baseY is the trunk's lowest block, which sits on the ground, so flat ground gives cells at baseY.
+    /// stand in (StandSpotScan.FirstInColumn). baseY is the trunk's lowest block, which sits on the ground, so flat
+    /// ground gives cells at baseY.
     /// </summary>
     public static List<StandSpot> FindGroundStarts(IJumpWorld world, int trunkX, int baseY, int trunkZ,
         int radius, int searchUp, int searchDown)
@@ -45,16 +46,10 @@ public static class HammockReachFinder
                 {
                     continue;
                 }
-                int x = trunkX + dx;
-                int z = trunkZ + dz;
-                for (int y = baseY + searchUp; y >= baseY - searchDown; y--)
+                StandSpot start = StandSpotScan.FirstInColumn(world, trunkX + dx, trunkZ + dz, baseY, searchUp, searchDown, false);
+                if (start != null)
                 {
-                    if (!world.CanStandAt(x, y, z))
-                    {
-                        continue;
-                    }
-                    starts.Add(MakeSpot(world, x, y, z));
-                    break;
+                    starts.Add(start);
                 }
             }
         }
@@ -167,7 +162,7 @@ public static class HammockReachFinder
                             notStandable.Add(key);
                             continue;
                         }
-                        StandSpot perch = MakeSpot(world, x, y, z);
+                        StandSpot perch = StandSpotScan.MakeSpot(world, x, y, z);
                         if (perch.FeetY < start.FeetY + MinPerchRise || perch.FeetY - start.FeetY > limits.MaxJumpUp)
                         {
                             continue;
@@ -254,18 +249,6 @@ public static class HammockReachFinder
         return new JumpWorldWithExtraBox(world, candidate.CellX, candidate.CellY, candidate.CellZ,
             floorBox.X1, floorBox.Y1, floorBox.Z1, floorBox.X2, floorBox.Y2, floorBox.Z2,
             spiderBox.X1, spiderBox.Y1, spiderBox.Z1, spiderBox.X2, spiderBox.Y2, spiderBox.Z2);
-    }
-
-    private static StandSpot MakeSpot(IJumpWorld world, int x, int y, int z)
-    {
-        StandSpot spot = new StandSpot();
-        spot.CellX = x;
-        spot.CellY = y;
-        spot.CellZ = z;
-        spot.FeetX = x + 0.5;
-        spot.FeetY = world.GetStandHeight(x, y, z);
-        spot.FeetZ = z + 0.5;
-        return spot;
     }
 
     private static bool WithinHorizontal(double ax, double az, double bx, double bz, double range)

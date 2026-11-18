@@ -14,6 +14,7 @@ namespace JumpingSpiders;
 /// What the tasks share (all in this folder):
 /// - JumpRunner: does a planned chain of jumps (wind-up, flight, pause on the perch), used by all five tasks.
 /// - WindUp: the crouch with the front legs raised before a jump (the attack uses it directly).
+/// - Walker: walking or running with the game's path traverser, with its animation (attack, flee, sleep, build).
 /// - SpiderTaskUtil: turning, stopping the walking AI, emotion-state sources, animations, debug log.
 /// - The pure planning helpers in Logic: JumpPlanner, LandingSpotFilter, FleeDirection, PounceMath, LaunchSpotFinder,
 ///   and for hammock building BuildStanceFinder, ClingJump, BuildReach, HammockBuildSchedule.

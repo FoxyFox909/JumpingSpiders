@@ -78,7 +78,6 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
     private readonly float maxCrawlDistance;
     private readonly float moveSpeed;
     private readonly float turnSpeedRadPerSec;
-    private readonly string walkAnimation;
     private readonly string buildAnimation;
 
     // ---- State of the current attempt (in memory; an attempt lasts seconds) ----
@@ -93,6 +92,7 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
     public string LastOutcome = "";
 
     private readonly JumpRunner runner;
+    private readonly Walker walker;
     private SpiderJumpWorld jumpWorld;
     private long nextCheckMs;
     private long deadlineMs;
@@ -113,9 +113,6 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
     private BuildStance sidleTarget;
     private bool held;
     private string heldOn = "";
-    private bool walking;
-    private bool walkArrived;
-    private bool walkFailed;
     private string outcome;
     private bool succeeded;
     private bool forced;
@@ -169,13 +166,15 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
         // Degrees per second: how fast it turns towards the site while building, and towards a jump while winding up.
         turnSpeedRadPerSec = taskConfig["turnSpeedDegPerSec"].AsFloat(360) * (float)Math.PI / 180f;
         // Animation codes from the entity JSON; "" = none.
-        walkAnimation = SpiderTaskUtil.ReadAnimation(taskConfig, "walkAnimation", "walk");
         buildAnimation = SpiderTaskUtil.ReadAnimation(taskConfig, "buildAnimation", "");
 
         runner = new JumpRunner(entity);
         // windUpMinMs, windUpMaxMs, pauseBetweenJumpsMs, turnSpeedDegPerSec, windUpAnimation, jumpAnimation (see
         // JumpRunner.ReadSettings).
         runner.ReadSettings(taskConfig);
+
+        walker = new Walker(entity, pathTraverser);
+        walker.Animation = SpiderTaskUtil.ReadAnimation(taskConfig, "walkAnimation", "walk");
     }
 
     /// <summary>Nothing may interrupt the spider while it is in the air.</summary>
@@ -238,7 +237,6 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
         walkTarget = null;
         sidleTarget = null;
         held = false;
-        walking = false;
         outcome = null;
         succeeded = false;
         worstTickMs = 0;
@@ -600,7 +598,7 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
             StartBuilding();
             return;
         }
-        if (walkFailed)
+        if (walker.Failed)
         {
             StopWalk();
             if (SpiderTaskUtil.IsDebugLogOn())
@@ -610,7 +608,7 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
             Phase = BuildPhase.FindingStances;
             return;
         }
-        if (walkArrived && entity.OnGround)
+        if (walker.Arrived && entity.OnGround)
         {
             StopWalk();
             Phase = BuildPhase.FindingStances;
@@ -866,18 +864,12 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
     {
         walks++;
         walkTarget = target;
-        walkArrived = false;
-        walkFailed = false;
-        pathTraverser.Stop();
-        bool started = pathTraverser.NavigateTo_Async(new Vec3d(target.FeetX, target.FeetY, target.FeetZ), moveSpeed,
-            WalkStopDistance, OnWalkArrived, OnWalkFailed, OnWalkFailed);
+        bool started = walker.WalkTo(new Vec3d(target.FeetX, target.FeetY, target.FeetZ), moveSpeed, WalkStopDistance);
         if (!started)
         {
             Fail("the pathfinder is busy");
             return;
         }
-        walking = true;
-        SpiderTaskUtil.StartAnimation(entity, walkAnimation);
         Phase = BuildPhase.Walking;
         if (SpiderTaskUtil.IsDebugLogOn())
         {
@@ -887,12 +879,7 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
 
     private void StopWalk()
     {
-        pathTraverser.Stop();
-        if (walking)
-        {
-            walking = false;
-            SpiderTaskUtil.StopAnimation(entity, walkAnimation);
-        }
+        walker.Stop();
         SpiderTaskUtil.StopWalking(entity);
     }
 
@@ -1138,16 +1125,5 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
             return false;
         }
         return a.CellX == b.CellX && a.CellY == b.CellY && a.CellZ == b.CellZ;
-    }
-
-    // Pathfinder callbacks (the game calls these from the traverser's tick).
-    private void OnWalkArrived()
-    {
-        walkArrived = true;
-    }
-
-    private void OnWalkFailed()
-    {
-        walkFailed = true;
     }
 }

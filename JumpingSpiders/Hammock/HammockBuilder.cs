@@ -31,13 +31,23 @@ public static class HammockBuilder
     /// </summary>
     public static BlockFacing ChooseBuildFacing(IWorldAccessor world, BlockPos pos)
     {
+        return FindSupportFacing(world, pos, GetSupportPreference(), true);
+    }
+
+    /// <summary>
+    /// The first direction in order whose neighbour can hold a hammock in pos, or null when there is none or the cell
+    /// itself cannot take a hammock (IsCellFreeForHammock). The check that both building (ChooseBuildFacing) and wild
+    /// hammocks on tree trunks (WildHammockSites) use. noWallUnderSolidBlock: never a wall hammock under a solid block
+    /// (see ChooseBuildFacing); wild hammocks leave it off, since their spots are tested with real jumps instead.
+    /// </summary>
+    public static BlockFacing FindSupportFacing(IWorldAccessor world, BlockPos pos, BlockFacing[] order, bool noWallUnderSolidBlock)
+    {
         BlockSilkHammock anyVariant = BlockSilkHammock.GetVariant(world, BlockFacing.DOWN);
         if (anyVariant == null || !IsCellFreeForHammock(world, pos, anyVariant))
         {
             return null;
         }
-        bool solidAbove = HasCollisionBoxes(world.BlockAccessor, pos.UpCopy());
-        BlockFacing[] order = GetSupportPreference();
+        bool solidAbove = noWallUnderSolidBlock && HasCollisionBoxes(world.BlockAccessor, pos.UpCopy());
         for (int i = 0; i < order.Length; i++)
         {
             if (solidAbove && order[i].IsHorizontal)
