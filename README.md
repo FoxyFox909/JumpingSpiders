@@ -227,6 +227,8 @@ Please also keep an eye on server performance with many spiders, and on spiders 
   hammock, never on the bare ground; one that runs into dusk becomes the night's sleep.
 - A spider with no free hammock within 24 blocks sleeps where it stands.
 - Spiders take no fall damage.
+- A dead spider disappears once it has been harvested, or after 4 in-game days (2 for a spiderling). It leaves no
+  bone pile behind.
 
 ## Assets to make
 
@@ -259,16 +261,17 @@ VS Model Creator names a texture's code after its file, so the faces use `#male`
 
 The collision box is set in the entity JSON (`hitboxSize`): 0.8 wide and 0.4 high for both adults, to fit the
 male's model (the female will get the same proportions), and 0.4 by 0.3 for the baby. The jump planner uses it,
-so change it there if a model ends up a very different size. It must stay at most 0.55 high: a spider sleeping
-in a wall or ceiling hammock stands 0.45 above the bottom of the cell, and the block above a ceiling hammock is
+so change it there if a model ends up a very different size. It must stay at most 0.4375 high: a spider sleeping
+in a wall or ceiling hammock stands 9/16 above the bottom of the cell, and the block above a ceiling hammock is
 solid. `eyeHeight` next to it must stay inside the box.
 
-Where a sleeping spider's feet are is `sleepFeetHeight` in the block JSON: 0.45 above the bottom of the cell for
-walls and the ceiling (the cradle's bottom) and 1/16 for the floor (its base). A spider lands on the hammock's
-collision box: for walls a slab up to the cradle's bottom, for the floor the base. Under a ceiling there is too
+Where a sleeping spider's feet are is `sleepFeetHeight` in the block JSON: 9/16 above the bottom of the cell for
+walls and the ceiling and 1/16 for the floor (its base). In the model the cradle's bottom is lower than that, at
+about 0.45: the gap is room for the spider's legs. A spider lands on the hammock's collision box: for walls a slab
+up to the sleeping height, for the floor the base. Under a ceiling there is too
 little room to jump into the cradle, so the ceiling hammock has a thin floor at the bottom of its cell; the spider
 lands there and is lifted into the cradle as it falls asleep (and put back down when it wakes). If the model's
-cradle moves, change `sleepFeetHeight` and the wall slab to match.
+cradle moves a lot, change `sleepFeetHeight` and the wall slab (keep the two equal) so the legs still clear the silk.
 
 ## Not in this version
 

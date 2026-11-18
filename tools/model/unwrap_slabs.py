@@ -76,23 +76,37 @@ def first_fit(w, h):
         for x in range(0, W - w + 1):
             if free(x, y, w, h):
                 return x, y
-    sys.exit("the layout does not fit a %d x %d texture" % (W, H))
+    return None
 
 
-for kind in ("big", "edges"):
-    group = [r for r in rects if r["kind"] == kind]
-    moving = []
-    for r in group:
-        if r["old"] is not None and free(r["old"][0], r["old"][1], r["w"], r["h"]):
-            r["x"], r["y"] = r["old"]
-            r["moved"] = False
+def lay_out(keep_positions):
+    """Places every area; False when they do not all fit. Big faces go first, then the edge strips."""
+    del placed[:]
+    for kind in ("big", "edges"):
+        group = [r for r in rects if r["kind"] == kind]
+        moving = []
+        for r in group:
+            if keep_positions and r["old"] is not None and free(r["old"][0], r["old"][1], r["w"], r["h"]):
+                r["x"], r["y"] = r["old"]
+                r["moved"] = False
+                placed.append(r)
+            else:
+                moving.append(r)
+        for r in sorted(moving, key=lambda r: (-r["h"], -r["w"])):
+            spot = first_fit(r["w"], r["h"])
+            if spot is None:
+                return False
+            r["x"], r["y"] = spot
+            r["moved"] = True
             placed.append(r)
-        else:
-            moving.append(r)
-    for r in sorted(moving, key=lambda r: (-r["h"], -r["w"])):
-        r["x"], r["y"] = first_fit(r["w"], r["h"])
-        r["moved"] = True
-        placed.append(r)
+    return True
+
+
+# First try to leave everything where it was; if the changed model no longer fits that way, start afresh.
+if not lay_out(True):
+    print("the old positions leave no room for the changed model: laying everything out afresh")
+    if not lay_out(False):
+        sys.exit("the layout does not fit a %d x %d texture" % (W, H))
 
 for r in placed:
     e = r["e"]

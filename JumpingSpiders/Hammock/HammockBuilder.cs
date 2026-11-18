@@ -26,7 +26,7 @@ public static class HammockBuilder
     /// Config.HammockSupportPreference wins (by default walls first, then ceiling, then floor).
     ///
     /// One sanity check on top: when the block right above the cell is solid, a wall hammock is never chosen there,
-    /// because no spider could ever jump into it (only 0.55 of a block of room above its floor, see the collision boxes
+    /// because no spider could ever jump into it (only 7/16 of a block of room above its floor, see the collision boxes
     /// in silkhammock.json). The ceiling hammock, made for exactly that case, can still be chosen.
     /// </summary>
     public static BlockFacing ChooseBuildFacing(IWorldAccessor world, BlockPos pos)

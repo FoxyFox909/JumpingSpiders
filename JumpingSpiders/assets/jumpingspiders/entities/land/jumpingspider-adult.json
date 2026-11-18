@@ -17,7 +17,7 @@
 		{ code: "gender", states: ["male", "female"] }
 	],
 	// Collision and selection box in blocks. Must fit inside a hammock's cell: at most 0.95 wide, and at most
-	// 0.55 tall, because a spider sleeping in a wall or ceiling hammock stands 0.45 above the bottom of the cell and
+	// 0.4375 tall, because a spider sleeping in a wall or ceiling hammock stands 9/16 above the bottom of the cell and
 	// the block above a ceiling hammock is solid. The model may be larger than this.
 	// Both sexes use the size of the male's real model, about 0.4 blocks tall (the female still has the placeholder
 	// box model, which is taller than this box).
@@ -94,7 +94,9 @@
 			// timer off for them.
 			{ code: "despawn", minPlayerDistance: 32, minSeconds: 600 },
 			{ code: "health", currenthealth: 8, maxhealth: 8 },
-			{ code: "deaddecay", hoursToDecay: 96, decayedBlock: "game:carcass-small" },
+			// A dead spider disappears when it has been harvested, or after hoursToDecay in-game hours. No "decayedBlock":
+			// with one (vanilla animals use "carcass-tiny" and the like) a bone pile block would be left behind.
+			{ code: "deaddecay", hoursToDecay: 96 },
 			{ code: "floatupwhenstuck", onlyWhenDead: true },
 			{
 				code: "harvestable",
