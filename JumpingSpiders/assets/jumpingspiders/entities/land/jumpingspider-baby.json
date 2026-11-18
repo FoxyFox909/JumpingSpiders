@@ -68,7 +68,7 @@
 			{ code: "repulseagents" },
 			{ code: "controlledphysics", stepHeight: 1.1251 },
 			// See the adult file: wild babies despawn, babies the player caught or bred never do.
-			{ code: "despawn", minPlayerDistance: 32, minSeconds: 600 },
+			{ code: "despawn", minPlayerDistance: 96, minSeconds: 600 },
 			{ code: "health", currenthealth: 3, maxhealth: 3 },
 			// No "decayedBlock": a dead spiderling leaves no bone pile behind (see the adult file).
 			{ code: "deaddecay", hoursToDecay: 48 },

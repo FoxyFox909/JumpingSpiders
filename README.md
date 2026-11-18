@@ -51,6 +51,7 @@ dotnet test JumpingSpiders.Tests/JumpingSpiders.Tests.csproj
 | `JumpingSpiders/Commands` | The `/jspider` debug commands |
 | `JumpingSpiders/assets/jumpingspiders` | Entity, block and item JSON, shapes, language file |
 | `tools/model` | Python scripts for shape files: mirror keyframes, lay out UVs, check animations |
+| `.asset_workshop` | Working files for the art (editor projects, UV maps). Version-controlled, not shipped with the mod |
 | `docs/engine-notes` | Reference notes on Vintage Story 1.22.7 internals. `CLAUDE.md` is the guide for AI agents |
 
 ## Knobs
@@ -148,7 +149,7 @@ Use creative mode, `/time set` to move between day and night, and `/jspider info
 4. Without commands: walk through a forest with `/jspider chunk` until you stand in a spider chunk, or go to one
    it lists. Wild spiders appear by themselves in spider chunks 24 to 80 blocks from you. This is slow by design
    (a check every 20 seconds, 12 hours of cooldown per chunk; `/jspider spawn` there starts that cooldown too).
-5. Walk more than 32 blocks from a wild spider for 10 real minutes: it is gone, and its hammock is still there.
+5. Walk more than 96 blocks from a wild spider for 10 real minutes: it is gone, and its hammock is still there.
 
 **Wild behaviour**
 6. Walk up to an awake wild spider: it jumps away, with no wind-up.

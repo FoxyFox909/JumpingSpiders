@@ -108,10 +108,12 @@
 			{ code: "repulseagents" },
 			{ code: "controlledphysics", stepHeight: 1.1251 },
 			// Wild spiders despawn after minSeconds (real seconds) without any player within minPlayerDistance (blocks).
+			// 96 is deliberately more than Config.SpawnMaxPlayerDistance (80): wild spiders spawn up to that far from a
+			// player, and with a smaller value here most of them would start this timer the moment they appear.
 			// No belowLightLevel: unlike vanilla animals, wild spiders also despawn in daylight.
 			// Spiders the player caught, placed, bred or fed never despawn: EntityBehaviorJumpingSpider switches this
 			// timer off for them.
-			{ code: "despawn", minPlayerDistance: 32, minSeconds: 600 },
+			{ code: "despawn", minPlayerDistance: 96, minSeconds: 600 },
 			{ code: "health", currenthealth: 8, maxhealth: 8 },
 			// A dead spider disappears when it has been harvested, or after hoursToDecay in-game hours. No "decayedBlock":
 			// with one (vanilla animals use "carcass-tiny" and the like) a bone pile block would be left behind.

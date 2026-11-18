@@ -83,6 +83,8 @@ Plain C# that a Java or GDScript programmer can read:
 unit-tested, `Jumping/` flies one jump, `AiTasks/` the spider's five tasks, `Spider/` entity behaviours and
 saved attributes, `Hammock/` the block, `Spawning/` wild spawns, `Commands/` `/jspider`, and
 `assets/jumpingspiders/` JSON, shapes, textures and lang. `tools/model/` holds scripts for shape files.
+`.asset_workshop/` holds the author's working files (editor projects such as `.pxc` and `.ase`, UV maps): it is
+version-controlled but not shipped, so keep such files there and out of `assets/`.
 `docs/engine-notes/` holds reference notes on 1.22.7 internals gathered from the game's sources at the start of
 the project; they describe the engine, not this mod's current design.
 
