@@ -83,10 +83,13 @@ public sealed class BuildTask : FrostingTask<BuildContext>
             });
 
 
+        // Publish into its own folder next to "Mods", not inside it: the game loads every folder under
+        // bin/<config>/Mods as a mod, and a "publish" folder in there shows up as a broken second mod.
         context.DotNetPublish($"../{BuildContext.ProjectName}/{BuildContext.ProjectName}.csproj",
             new DotNetPublishSettings
             {
-                Configuration = context.BuildConfiguration
+                Configuration = context.BuildConfiguration,
+                OutputDirectory = $"../{BuildContext.ProjectName}/bin/{context.BuildConfiguration}/publish"
             });
     }
 }
@@ -100,7 +103,7 @@ public sealed class PackageTask : FrostingTask<BuildContext>
         context.EnsureDirectoryExists("../Releases");
         context.CleanDirectory("../Releases");
         context.EnsureDirectoryExists($"../Releases/{context.Name}");
-        context.CopyFiles($"../{BuildContext.ProjectName}/bin/{context.BuildConfiguration}/Mods/mod/publish/*",
+        context.CopyFiles($"../{BuildContext.ProjectName}/bin/{context.BuildConfiguration}/publish/*",
             $"../Releases/{context.Name}");
         if (context.DirectoryExists($"../{BuildContext.ProjectName}/assets"))
         {

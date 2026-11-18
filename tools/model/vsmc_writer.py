@@ -14,8 +14,16 @@ def load(path):
     # The editor sometimes leaves a comma before a closing bracket; the game accepts that, strict JSON does not.
     strict = re.sub(r",(\s*[\]}])", r"\1", raw)
     data = json.loads(strict)
-    if strict == raw and shape(data).replace("\n", newline) != body:
-        sys.exit("vsmc_writer does not reproduce " + path + " exactly; not touching it")
+    written = shape(data).replace("\n", newline)
+    if strict == raw:
+        if written != body:
+            sys.exit("vsmc_writer does not reproduce " + path + " exactly; not touching it")
+    else:
+        # With trailing commas the file cannot come back byte for byte (they will be gone, with the blank line the
+        # editor leaves beside them), so compare everything except white space.
+        if re.sub(r"\s+", "", written) != re.sub(r"\s+", "", strict):
+            sys.exit("vsmc_writer does not reproduce the contents of " + path + "; not touching it")
+        print("note: " + path + " has trailing commas; they will be removed when it is written back")
     return data, newline, tail
 
 
