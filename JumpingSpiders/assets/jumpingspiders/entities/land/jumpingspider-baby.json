@@ -33,6 +33,11 @@
 	},
 	client: {
 		renderer: "Shape",
+		// PLACEHOLDER: a box model with a vanilla hare texture, until the author makes the spiderling model (based on
+		// the adult model and its animations) and its texture.
+		// Texture variants: the baby has none, so a grown-up spider rolls its own adult texture variant. When the baby
+		// gets as many alternates as the adult's "male" texture (one today), the vanilla grow behavior carries the
+		// baby's variant ("textureIndex") over to the adult instead.
 		shape: { base: "jumpingspiders:entity/land/jumpingspider/baby" },
 		textures: {
 			"skin": { base: "game:entity/animal/mammal/hare/european-baby" }

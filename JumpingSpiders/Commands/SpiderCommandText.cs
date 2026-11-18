@@ -82,6 +82,18 @@ public static class SpiderCommandText
         }
         text.AppendLine("Kept by a player: " + keptText + "; origin: " + origin + ".");
 
+        int textureIndex = SpiderAttributes.GetTextureIndex(spider);
+        int variantCount = SpiderAttributes.GetTextureVariantCount(spider);
+        if (textureIndex < 0)
+        {
+            text.AppendLine("Texture variant: none set (its type has " + variantCount + " variant(s)).");
+        }
+        else
+        {
+            text.AppendLine("Texture variant: " + textureIndex + " of 0.." + (variantCount - 1)
+                + " (0 = the first texture's base, 1 = its first alternate).");
+        }
+
         if (SpiderAttributes.IsHungry(spider))
         {
             text.AppendLine("Hungry: yes, it hunts prey and same-sex rivals.");

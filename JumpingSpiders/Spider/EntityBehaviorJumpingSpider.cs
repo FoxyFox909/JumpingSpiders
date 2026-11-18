@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Text;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
@@ -28,6 +30,8 @@ namespace JumpingSpiders;
 /// - Despawn protection: a spider the player caught, placed, bred or fed never despawns. See DespawnRules.
 /// - OnHammockBrokenWhileAsleep: a wild spider woken by a player breaking its hammock turns on that player.
 /// - Info text: wild or domesticated, hungry or sated, asleep.
+/// - Per-sex model tweaks (client): both adult sexes share one model file, and OnTesselation scales the elements the
+///   entity JSON lists in "elementScalesByType" (the female's smaller pedipalps). See ElementScales.
 /// </summary>
 public class EntityBehaviorJumpingSpider : EntityBehavior
 {
@@ -59,6 +63,19 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
 
     private float slowCheckAccum;
 
+    /// <summary>
+    /// Key in this behavior's JSON (the client list) for the element scale table. Written "elementScalesByType" in
+    /// the JSON so each sex can have its own; the game resolves that to "elementScales" for each entity type.
+    /// </summary>
+    private const string ElementScalesKey = "elementScales";
+
+    // Model elements to draw at a different size than modelled, from the JSON. Empty on the server (the server
+    // behavior list has no table) and for the male.
+    private readonly ElementScales elementScales = new ElementScales();
+
+    // So a misspelled element name is reported once per spider, not every time its mesh is rebuilt.
+    private bool missingElementsReported;
+
     public EntityBehaviorJumpingSpider(Entity entity) : base(entity)
     {
     }
@@ -71,6 +88,8 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
     public override void Initialize(EntityProperties properties, JsonObject attributes)
     {
         base.Initialize(properties, attributes);
+
+        ReadElementScales(attributes);
 
         if (entity.World.Side != EnumAppSide.Server)
         {
@@ -306,6 +325,123 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
         bool triggered = emotions.TryTriggerState(AggressiveStateCode, 0.0, playerEntityId);
         entity.World.Logger.Debug("[jumpingspiders] {0} (id {1}) woken by a broken hammock; aggressive: {2}",
             entity.Code, entity.EntityId, triggered);
+    }
+
+    // ---------------- Model: per-sex element scales ----------------
+
+    // Reads "elementScales" ({ "ElementName": scale, ... }) from this behavior's JSON. Bad entries are skipped
+    // with a warning, so a typo in the JSON never stops the spider from loading.
+    private void ReadElementScales(JsonObject attributes)
+    {
+        if (attributes == null || !attributes[ElementScalesKey].Exists)
+        {
+            return;
+        }
+
+        Dictionary<string, double> table;
+        try
+        {
+            table = attributes[ElementScalesKey].AsObject<Dictionary<string, double>>();
+        }
+        catch (Exception e)
+        {
+            entity.World.Logger.Warning("[jumpingspiders] {0}: \"{1}\" must map element names to numbers; ignored ({2})",
+                entity.Code, ElementScalesKey, e.Message);
+            return;
+        }
+        if (table == null)
+        {
+            return;
+        }
+
+        foreach (KeyValuePair<string, double> entry in table)
+        {
+            if (!elementScales.Set(entry.Key, entry.Value))
+            {
+                entity.World.Logger.Warning("[jumpingspiders] {0}: element scale {1} = {2} ignored (it must be from {3} to {4})",
+                    entity.Code, entry.Key, entry.Value, ElementScales.MinScale, ElementScales.MaxScale);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The game calls this just before it builds the entity's mesh from its shape (on the client, when the spider
+    /// comes into view and whenever the shape is marked modified). entityShape is the shape loaded from the model
+    /// file, and it is shared: the game loads each shape file once and every entity of every type that uses that
+    /// file (here both adult sexes) gets the same object. So the shape is copied before it is changed, and
+    /// shapeIsCloned tells the game it now holds a per-entity copy; the game then builds the mesh and this spider's
+    /// animator from the copy, so the animations move the scaled parts too.
+    /// </summary>
+    public override void OnTesselation(ref Shape entityShape, string shapePathForLogging, ref bool shapeIsCloned, ref string[] willDeleteElements)
+    {
+        base.OnTesselation(ref entityShape, shapePathForLogging, ref shapeIsCloned, ref willDeleteElements);
+
+        if (elementScales.IsEmpty || entityShape == null || entityShape.Elements == null)
+        {
+            return;
+        }
+
+        if (!shapeIsCloned)
+        {
+            entityShape = entityShape.Clone();
+            shapeIsCloned = true;
+        }
+
+        HashSet<string> found = new HashSet<string>(StringComparer.Ordinal);
+        ScaleElements(entityShape.Elements, found);
+
+        if (!missingElementsReported)
+        {
+            List<string> missing = elementScales.MissingFrom(found);
+            if (missing.Count > 0)
+            {
+                missingElementsReported = true;
+                entity.World.Logger.Warning("[jumpingspiders] {0}: the shape {1} has no element named {2}, so it cannot be scaled (see elementScalesByType in the entity JSON)",
+                    entity.Code, shapePathForLogging, string.Join(", ", missing));
+            }
+        }
+    }
+
+    // Walks the element tree. A listed element gets its scale multiplied by the JSON's number; its children are
+    // scaled along with it by the game (a child is placed inside its parent), so they need no entry of their own.
+    // A child that is listed too gets its own number on top of its parent's.
+    private void ScaleElements(ShapeElement[] elements, HashSet<string> found)
+    {
+        if (elements == null)
+        {
+            return;
+        }
+        for (int i = 0; i < elements.Length; i++)
+        {
+            ShapeElement element = elements[i];
+            double factor;
+            if (elementScales.TryGetScale(element.Name, out factor))
+            {
+                found.Add(element.Name);
+                element.ScaleX = ElementScales.Combine(element.ScaleX, factor);
+                element.ScaleY = ElementScales.Combine(element.ScaleY, factor);
+                element.ScaleZ = ElementScales.Combine(element.ScaleZ, factor);
+                // Each element remembers the inverse of its resting position (parents included), which the animator
+                // uses to move the mesh. The copy inherited the unscaled one; clearing it makes the game work it out
+                // again from the new scale when it loads the animator. Without this the parts would be scaled twice.
+                ClearInverseTransforms(element);
+            }
+            ScaleElements(element.Children, found);
+        }
+    }
+
+    // Clears the remembered inverse resting position of the element and everything attached below it.
+    private static void ClearInverseTransforms(ShapeElement element)
+    {
+        element.inverseModelTransform = null;
+        if (element.Children == null)
+        {
+            return;
+        }
+        for (int i = 0; i < element.Children.Length; i++)
+        {
+            ClearInverseTransforms(element.Children[i]);
+        }
     }
 
     // ---------------- Info text ----------------

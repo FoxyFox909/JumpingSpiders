@@ -54,6 +54,13 @@ public static class SpiderAttributes
     public const string GenerationKey = "generation";
 
     /// <summary>
+    /// The vanilla texture variant attribute (top level of WatchedAttributes): 0 draws the entity's first texture's
+    /// "base", 1 its first alternate, and so on. The server rolls it once, when an entity whose first texture has
+    /// alternates enters the world without one, and saves it with the entity.
+    /// </summary>
+    public const string TextureIndexKey = "textureIndex";
+
+    /// <summary>
     /// The vanilla breeding counter: WatchedAttributes tree "hunger", value "saturation", in food portions.
     /// The vanilla eat task raises it, the vanilla "multiply" behavior lowers it when a female gets pregnant.
     /// </summary>
@@ -111,6 +118,29 @@ public static class SpiderAttributes
     public static int GetGeneration(Entity entity)
     {
         return entity.WatchedAttributes.GetInt(GenerationKey, 0);
+    }
+
+    /// <summary>The spider's texture variant (see TextureIndexKey), or -1 when it has none.</summary>
+    public static int GetTextureIndex(Entity entity)
+    {
+        if (!entity.WatchedAttributes.HasAttribute(TextureIndexKey))
+        {
+            return -1;
+        }
+        return entity.WatchedAttributes.GetInt(TextureIndexKey, 0);
+    }
+
+    /// <summary>
+    /// How many texture variants the spider's type has (base plus alternates; 1 when it has no alternates). On the
+    /// server the textures themselves are not kept, only the count of alternates.
+    /// </summary>
+    public static int GetTextureVariantCount(Entity entity)
+    {
+        if (entity.Properties == null || entity.Properties.Client == null)
+        {
+            return 1;
+        }
+        return entity.Properties.Client.TexturesAlternatesCount + 1;
     }
 
     /// <summary>Domesticated spiders are bred ones, from generation Config.DomesticatedFromGeneration on.</summary>

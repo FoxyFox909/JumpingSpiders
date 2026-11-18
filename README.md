@@ -3,9 +3,9 @@
 A Vintage Story code mod (game version 1.22.7) that adds the Jumping Spider, a passive predator that leaps onto
 its prey, and the Silk Hammock block it sleeps in.
 
-The adult male has its real model, with walk, run and jump animations and a texture that is still being
-painted. Every other model, texture and animation in this repository is a placeholder (boxes with vanilla hare
-and linen textures). See
+Both adult sexes share the real adult model, with walk, run and jump animations, and two texture variants that
+are still being painted; the female draws her pedipalps smaller. The spiderling's model and texture are
+placeholders (a box with a vanilla hare texture), as is the linen on the hammock's untextured faces. See
 [Assets to make](#assets-to-make).
 
 ## Build and run
@@ -51,6 +51,8 @@ dotnet test JumpingSpiders.Tests/JumpingSpiders.Tests.csproj
 | `JumpingSpiders/Spawning` | Wild spawning in spider chunks, and wild hammocks on tree trunks |
 | `JumpingSpiders/Commands` | The `/jspider` debug commands |
 | `JumpingSpiders/assets/jumpingspiders` | Entity, block and item JSON, shapes, language file |
+| `tools/model` | Python scripts for shape files: mirror keyframes, lay out UVs, check animations |
+| `docs/engine-notes` | Reference notes on Vintage Story 1.22.7 internals. `CLAUDE.md` is the guide for AI agents |
 
 ## Knobs
 
@@ -92,6 +94,7 @@ Per-task knobs are in the entity JSON (`assets/jumpingspiders/entities/land/jump
 | Carcass yield of the spider's victims | `deathByMultiplier` in the adult JSON | 0.2 |
 | Breeding | the `multiply` behavior in the adult JSON | 2 meals, 4 days pregnant, 1 to 3 babies |
 | Growing up | `hoursToGrow` in the baby JSON | 120 in-game hours |
+| Model parts drawn at another size, per sex | `elementScalesByType` on the client `jumpingspiders.spider` behavior in the adult JSON | female `PedipalpL` and `PedipalpR` 0.6 (a placeholder to tune by eye), male as modelled |
 
 `DomesticatedFromGeneration` in the config and the `maxGeneration: 0` / `minGeneration: 1` values in the entity
 JSON must be changed together.
@@ -104,7 +107,7 @@ nearest one.
 | Command | What it does |
 |---|---|
 | `/jspider chunk` | Is this a spider chunk? Shows climate, its wild hammock, and the nearest spider chunks |
-| `/jspider info` | Generation, wild or domesticated, hungry, asleep, curiosity and how long it stays up after dusk, nap chance per slot and whether it is napping, whether it owes a hammock and when its next build attempt comes, home hammock |
+| `/jspider info` | Generation, wild or domesticated, texture variant, hungry, asleep, curiosity and how long it stays up after dusk, nap chance per slot and whether it is napping, whether it owes a hammock and when its next build attempt comes, home hammock |
 | `/jspider hungry` | Makes the spider hungry so it hunts |
 | `/jspider sated [hours]` | Makes it sated |
 | `/jspider generation <n>` | Sets its generation. 0 is wild, 1 or more is domesticated |
@@ -187,6 +190,14 @@ Use creative mode, `/time set` to move between day and night, and `/jspider info
     lowers the wall they need to clear; a roof always works.
 25. Watch whether jumps look right: the arc, the landing, and whether spiders get stuck or jitter.
 
+**Looks**
+26. Spawn several adults of each sex (`/jspider spawn`): about half wear `male.png` and half `male2.png`
+    (`/jspider info` shows the variant: 0 or 1). A spider keeps its variant after a save and reload and after a
+    trip in a basket trap. A spiderling that grows up gets a new random variant (the baby has no variants yet).
+27. Females have smaller pedipalps than males (0.6 of the size), still attached at the base, and they move with
+    every animation. Males look exactly as modelled. The client log shows no warning from `jumpingspiders`.
+    The female's creature item in the inventory shows the male's full-size pedipalps (items cannot scale parts).
+
 Please also keep an eye on server performance with many spiders, and on spiders near water.
 
 ## Behaviour worth knowing
@@ -237,8 +248,8 @@ or change the paths in the entity, block and item JSON.
 
 | File | Notes |
 |---|---|
-| `shapes/entity/land/jumpingspider/male.json` | The real adult male model, with `walk`, `run`, `jumpwindup` and `jump`. Its texture is `textures/male.png`, still being painted |
-| `shapes/entity/land/jumpingspider/female.json`, `baby.json` | Placeholders. Texture code `skin` |
+| `shapes/entity/land/jumpingspider/male.json` | The real adult model, for both sexes despite its name, with `walk`, `run`, `jumpwindup`, `jump` and `sleep`. Its textures are `textures/male.png` and `textures/male2.png` (both sexes), still being painted |
+| `shapes/entity/land/jumpingspider/baby.json` | Placeholder box model with a vanilla hare texture (code `skin`). The spiderling will get its own model and texture, based on the adult model and its animations |
 | `shapes/block/silkhammock-wall.json` | The one hammock model for all twelve variants. Back panel on the east (+X) side, opening to the west (-X); the block JSON turns it to each wall, to each opening direction under a ceiling, and upside down and to each opening direction on the floor. Texture code `silk`; the cradle's untextured faces (`#null`) are mapped to the same placeholder linen in the block JSON until they get a texture |
 
 Animations each spider shape needs, with these exact lowercase codes:
@@ -255,12 +266,33 @@ Animations each spider shape needs, with these exact lowercase codes:
 In a shape file, every keyframe element must set all six of `offsetX/Y/Z` and `rotationX/Y/Z`, or the server
 fails to load the animation.
 
-The male model has its own texture, `textures/male.png` (96 x 96 pixels for the model's 48 x 48 texture units).
-VS Model Creator names a texture's code after its file, so the faces use `#male`, and the entity JSON and
-`itemtypes/creature.json` map `male` to `jumpingspiders:male`. If the file is renamed or moved, change both.
+**One adult model for both sexes.** `male.json`, `male.png` and `male2.png` keep their names because the editor
+project uses them, but they are the adult model and textures for males and females alike. The textures are 96 x 96
+pixels for the model's 48 x 48 texture units. VS Model Creator names a texture's code after its file, so the faces
+use `#male`, and the entity JSON and `itemtypes/creature.json` map `male` to `jumpingspiders:male`. If a file is
+renamed or moved, change both.
+
+**Texture variants.** In the adult entity JSON the `male` texture lists `male2` under `alternates`; every file there
+must have the same UV layout. The server picks one variant at random (`textureIndex`: 0 for `male.png`, 1 for
+`male2.png`) when a spider first enters the world, from the wild spawner, `/jspider spawn` or a creature item, and
+saves it with the spider, so it survives a reload and a basket trap. The game counts variants on the entity's
+first texture only, so `male` must stay the first texture listed. To add a third variant, add a file with the same
+layout to `alternates`. A spiderling has no variants yet, so a spider gets a new random one when it grows up; once
+the baby's texture has as many alternates as the adult's, growing up keeps the baby's variant (vanilla behaviour).
+The creature item always shows `male.png`.
+
+**The female's smaller pedipalps** are made from the same model file, with no second model and no extra
+keyframes. `elementScalesByType` on the client `jumpingspiders.spider` behavior in the adult JSON lists, per sex,
+model elements to draw at another size: `"*-female": { "PedipalpL": 0.6, "PedipalpR": 0.6 }`. Element names are the
+ones in VS Model Creator (exact spelling and case). A scaled element shrinks toward its rotation origin, its child
+elements (`PedipalpLB`, `PedipalpRB`) shrink with it, and the animations still move it; keyframe offsets on it are
+scaled too. Any element can be listed, for either sex. Before drawing a spider the game hands the model to the
+behavior, which scales those elements on a copy of it: the loaded model is shared by every spider of both sexes, so
+the male is never touched. The server does not draw models and keeps the model only for animation timing, so it
+needs no scaling. If an element in the list is renamed in the editor, the client log warns about it.
 
 The collision box is set in the entity JSON (`hitboxSize`): 0.8 wide and 0.4 high for both adults, to fit the
-male's model (the female will get the same proportions), and 0.4 by 0.3 for the baby. The jump planner uses it,
+adult model, and 0.4 by 0.3 for the baby. The jump planner uses it,
 so change it there if a model ends up a very different size. It must stay at most 0.4375 high: a spider sleeping
 in a wall or ceiling hammock stands 9/16 above the bottom of the cell, and the block above a ceiling hammock is
 solid. `eyeHeight` next to it must stay inside the box.

@@ -190,6 +190,14 @@ blending, interpolation between server ticks, and anything that needs a real `IP
 - The editor names a texture code after its file (`male.png` gives `#male`) and writes `#null` on untextured
   faces. The entity, block and item JSON map those codes to texture paths.
 - With `"autoUnwrap": false` on an element and `"autoUv": false` on a face, the editor keeps hand-set UVs.
+- Both adult sexes use `male.json`, `male.png` and `male2.png` (names kept for the author's editor project). The
+  female's smaller pedipalps come from `elementScalesByType` in the adult JSON, applied in
+  `EntityBehaviorJumpingSpider.OnTesselation` (client).
+- A loaded entity shape is one object per file, shared by every entity of every type that uses it. A behavior's
+  `OnTesselation` that changes it must clone it and set `shapeIsCloned` (the game then builds the mesh and a
+  per-entity animator from the clone), and after changing an element's scale or position clear
+  `inverseModelTransform` on it and its children: clones copy the cached inverse rest pose, and a stale one makes
+  the animator apply the change twice.
 - The editor sometimes writes a trailing comma. The game accepts it; strict JSON parsers do not.
 
 ## Model tooling
