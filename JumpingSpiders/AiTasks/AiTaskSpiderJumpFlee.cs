@@ -55,7 +55,7 @@ public class AiTaskSpiderJumpFlee : AiTaskBaseTargetable
     private bool running;
     private bool wasJumping;
 
-    /// <summary>How many flee jumps this session made (read by debug tools).</summary>
+    /// <summary>How many flee jumps this session made (for the debug log).</summary>
     public int JumpsThisSession;
 
     /// <summary>Fleeing is not an attack, so the world's "creature hostility" setting does not switch it off.</summary>
@@ -77,7 +77,7 @@ public class AiTaskSpiderJumpFlee : AiTaskBaseTargetable
         // true = flee from whoever caused the emotion state in whenInEmotionState (the attacker), whatever it is.
         fleeFromEmotionSource = taskConfig["fleeFromEmotionSource"].AsBool(false);
         // Milliseconds: longest flee session.
-        fleeDurationMs = taskConfig["fleeDurationMs"].AsInt(6000);
+        fleeDurationMs = taskConfig["fleeDurationMs"].AsInt(5000);
         // Blocks: how far from the spider, straight away from the threat, the landing area is centred.
         jumpDistance = taskConfig["jumpDistance"].AsFloat(4.5f);
         // Blocks: radius of the ball around that point in which a landing spot is picked.
@@ -195,8 +195,11 @@ public class AiTaskSpiderJumpFlee : AiTaskBaseTargetable
         running = false;
         wasJumping = false;
         JumpsThisSession = 0;
-        SpiderTaskUtil.Log(entity, LogName, "flees from " + targetEntity.Code + " " + targetEntity.EntityId + " at "
-            + SpiderTaskUtil.HorizontalDistance(entity, targetEntity).ToString("0.00") + " blocks");
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "flees from " + targetEntity.Code + " " + targetEntity.EntityId + " at "
+                + SpiderTaskUtil.HorizontalDistance(entity, targetEntity).ToString("0.00") + " blocks");
+        }
     }
 
     public override bool ContinueExecute(float dt)
@@ -215,29 +218,41 @@ public class AiTaskSpiderJumpFlee : AiTaskBaseTargetable
         {
             wasJumping = false;
             nextJumpMs = now + pauseBetweenJumpsMs;
-            string distanceText = "?";
-            if (!SpiderTaskUtil.IsGone(entity, targetEntity))
+            if (SpiderTaskUtil.IsDebugLogOn())
             {
-                distanceText = SpiderTaskUtil.HorizontalDistance(entity, targetEntity).ToString("0.00");
+                string distanceText = "?";
+                if (!SpiderTaskUtil.IsGone(entity, targetEntity))
+                {
+                    distanceText = SpiderTaskUtil.HorizontalDistance(entity, targetEntity).ToString("0.00");
+                }
+                SpiderTaskUtil.Log(entity, LogName, "flee jump " + JumpsThisSession + " over (" + runner.LastEndReason
+                    + "), now " + distanceText + " blocks from the threat");
             }
-            SpiderTaskUtil.Log(entity, LogName, "flee jump " + JumpsThisSession + " over (" + runner.LastEndReason
-                + "), now " + distanceText + " blocks from the threat");
         }
 
         if (SpiderTaskUtil.IsGone(entity, targetEntity))
         {
-            SpiderTaskUtil.Log(entity, LogName, "threat gone");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "threat gone");
+            }
             return false;
         }
         double distance = SpiderTaskUtil.HorizontalDistance(entity, targetEntity);
         if (distance >= safeDistance)
         {
-            SpiderTaskUtil.Log(entity, LogName, "safe at " + distance.ToString("0.00") + " blocks after " + JumpsThisSession + " jumps");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "safe at " + distance.ToString("0.00") + " blocks after " + JumpsThisSession + " jumps");
+            }
             return false;
         }
         if (now > fleeUntilMs)
         {
-            SpiderTaskUtil.Log(entity, LogName, "flee time over at " + distance.ToString("0.00") + " blocks after " + JumpsThisSession + " jumps");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "flee time over at " + distance.ToString("0.00") + " blocks after " + JumpsThisSession + " jumps");
+            }
             return false;
         }
         if (!entity.OnGround || now < nextJumpMs)
@@ -265,7 +280,10 @@ public class AiTaskSpiderJumpFlee : AiTaskBaseTargetable
         StopRunning();
         if (cancelled)
         {
-            SpiderTaskUtil.Log(entity, LogName, "interrupted after " + JumpsThisSession + " jumps");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "interrupted after " + JumpsThisSession + " jumps");
+            }
         }
         base.FinishExecute(cancelled);
     }

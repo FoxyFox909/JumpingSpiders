@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace JumpingSpiders;
 
 /// <summary>
@@ -13,6 +15,15 @@ namespace JumpingSpiders;
 /// </summary>
 public class JumpingSpidersConfig
 {
+    // ---------------- Debugging ----------------
+
+    /// <summary>
+    /// true: every spider writes what it decides and why (each jump, hunt, flee, bedtime, nap and build attempt) to the
+    /// server's debug log (Logs/server-debug.log), and so does wild spawning. Switch it on when reporting a problem.
+    /// false (default): none of that is written, or even put together. /jspider replies are not affected.
+    /// </summary>
+    public bool DebugLogging = false;
+
     // ---------------- Taming, hunger, meals ----------------
 
     /// <summary>
@@ -64,7 +75,11 @@ public class JumpingSpidersConfig
     /// <summary>When jumping up, how far above the landing height the arc must peak, in blocks.</summary>
     public double JumpLedgeClearance = 0.4;
 
-    /// <summary>How many jumps the planner may chain (2 = one intermediate perch).</summary>
+    /// <summary>
+    /// How many jumps the planner may chain (2 = one intermediate perch). Each extra jump multiplies the work of one
+    /// search: with 2 a search costs at most a few milliseconds, with 3 or more tens of milliseconds (about 40 ms
+    /// measured for a goal that cannot be reached, which is when a search does the most), so keep it at 2.
+    /// </summary>
     public int MaxPlannedJumps = 2;
 
     /// <summary>
@@ -211,6 +226,7 @@ public class JumpingSpidersConfig
 
     /// <summary>
     /// Most spider chunks given a spawn attempt per check, over all players together. Bounds the work of one check.
+    /// Chunks still on their cooldown or at their cap are passed over without counting.
     /// </summary>
     public int MaxSpawnAttemptsPerCheck = 2;
 
@@ -295,6 +311,80 @@ public class JumpingSpidersConfig
     /// columns around it (the game counts blocks placed by hand per chunk). Keeps wild spiders out of bases.
     /// </summary>
     public int SpawnMaxPlayerPlacedBlocks = 20;
+
+    /// <summary>
+    /// Corrects, in place, the settings whose value would break the mod: a number that would make the code throw, loop
+    /// or divide by zero (a negative search radius, zero intervals and spacings), a share or chance outside 0..1, or the
+    /// upper end of a range below its lower end. Returns one sentence per corrected setting, for the server log.
+    /// Values that are merely unusual (a huge radius, a small jump) are left alone.
+    /// </summary>
+    public List<string> Validate()
+    {
+        JumpingSpidersConfig defaults = new JumpingSpidersConfig();
+        SettingCorrector fix = new SettingCorrector();
+
+        SatedHoursAfterKill = fix.AtLeast("SatedHoursAfterKill", SatedHoursAfterKill, 0);
+        SaturationPerMeal = (float)fix.AtLeast("SaturationPerMeal", SaturationPerMeal, 0);
+
+        MinJumpAngleDeg = fix.Between("MinJumpAngleDeg", MinJumpAngleDeg, 1, 89);
+        MaxJumpAngleDeg = fix.Between("MaxJumpAngleDeg", MaxJumpAngleDeg, 1, 89);
+        MaxJumpAngleDeg = fix.NotBelow("MaxJumpAngleDeg", MaxJumpAngleDeg, "MinJumpAngleDeg", MinJumpAngleDeg);
+        JumpAngleDeg = fix.Between("JumpAngleDeg", JumpAngleDeg, MinJumpAngleDeg, MaxJumpAngleDeg);
+        MaxJumpSpeed = fix.AboveZero("MaxJumpSpeed", MaxJumpSpeed, defaults.MaxJumpSpeed);
+        MaxJumpUp = fix.AtLeast("MaxJumpUp", MaxJumpUp, 0);
+        MaxJumpDown = fix.AtLeast("MaxJumpDown", MaxJumpDown, 0);
+        MaxJumpHorizontal = fix.AboveZero("MaxJumpHorizontal", MaxJumpHorizontal, defaults.MaxJumpHorizontal);
+        JumpLedgeClearance = fix.AtLeast("JumpLedgeClearance", JumpLedgeClearance, 0);
+        MaxPlannedJumps = fix.AtLeast("MaxPlannedJumps", MaxPlannedJumps, 1);
+        MaxFlightSeconds = fix.AboveZero("MaxFlightSeconds", MaxFlightSeconds, defaults.MaxFlightSeconds);
+        JumpFlightSpeedMultiplier = fix.AboveZero("JumpFlightSpeedMultiplier", JumpFlightSpeedMultiplier, defaults.JumpFlightSpeedMultiplier);
+        JumpLiftoffTimeoutSeconds = fix.AboveZero("JumpLiftoffTimeoutSeconds", JumpLiftoffTimeoutSeconds, defaults.JumpLiftoffTimeoutSeconds);
+
+        CuriosityMin = fix.Between("CuriosityMin", CuriosityMin, 0, 1);
+        CuriosityMax = fix.Between("CuriosityMax", CuriosityMax, 0, 1);
+        CuriosityMax = fix.NotBelow("CuriosityMax", CuriosityMax, "CuriosityMin", CuriosityMin);
+        CuriosityNightMultiplier = fix.AtLeast("CuriosityNightMultiplier", CuriosityNightMultiplier, 0);
+        CuriosityStayUpHoursMax = fix.AtLeast("CuriosityStayUpHoursMax", CuriosityStayUpHoursMax, 0);
+        CuriosityStayUpMaxNightShare = fix.Between("CuriosityStayUpMaxNightShare", CuriosityStayUpMaxNightShare, 0, 1);
+
+        NapSlotHours = fix.AboveZero("NapSlotHours", NapSlotHours, defaults.NapSlotHours);
+        NapChanceMax = fix.Between("NapChanceMax", NapChanceMax, 0, 1);
+        NapMinMinutes = fix.AtLeast("NapMinMinutes", NapMinMinutes, 0);
+        NapMaxMinutes = fix.NotBelow("NapMaxMinutes", NapMaxMinutes, "NapMinMinutes", NapMinMinutes);
+
+        HammockSpacing = fix.AtLeast("HammockSpacing", HammockSpacing, 1);
+        HammockBuildIntervalHours = fix.AboveZero("HammockBuildIntervalHours", HammockBuildIntervalHours, defaults.HammockBuildIntervalHours);
+        HammockBuildRange = fix.AtLeast("HammockBuildRange", HammockBuildRange, 0);
+        HammockBuildSearchRadius = fix.AtLeast("HammockBuildSearchRadius", HammockBuildSearchRadius, 0);
+        // At least one height to pick from: HammockBuildSearchDown below the feet up to HammockBuildSearchUp above.
+        HammockBuildSearchUp = fix.NotBelow("HammockBuildSearchUp", HammockBuildSearchUp, "minus HammockBuildSearchDown", -HammockBuildSearchDown);
+        HammockClaimMaxDistance = fix.AtLeast("HammockClaimMaxDistance", HammockClaimMaxDistance, 0);
+        HammockSleepSearchRange = fix.AtLeast("HammockSleepSearchRange", HammockSleepSearchRange, 0);
+        HomeHammockForgetDistance = fix.AtLeast("HomeHammockForgetDistance", HomeHammockForgetDistance, 0);
+
+        SpiderChunkFraction = fix.Between("SpiderChunkFraction", SpiderChunkFraction, 0, 1);
+        SpawnCheckIntervalSeconds = fix.AboveZero("SpawnCheckIntervalSeconds", SpawnCheckIntervalSeconds, defaults.SpawnCheckIntervalSeconds);
+        MaxSpawnAttemptsPerCheck = fix.AtLeast("MaxSpawnAttemptsPerCheck", MaxSpawnAttemptsPerCheck, 0);
+        MaxWildSpidersPerSpiderChunk = fix.AtLeast("MaxWildSpidersPerSpiderChunk", MaxWildSpidersPerSpiderChunk, 0);
+        SpiderChunkSpawnCooldownHours = fix.AtLeast("SpiderChunkSpawnCooldownHours", SpiderChunkSpawnCooldownHours, 0);
+        WildHammockChance = fix.Between("WildHammockChance", WildHammockChance, 0, 1);
+        WildHammockReuseRange = fix.AtLeast("WildHammockReuseRange", WildHammockReuseRange, 0);
+        WildHammockHeightBias = fix.AtLeast("WildHammockHeightBias", WildHammockHeightBias, 0);
+        WildHammockTreesPerAttempt = fix.AtLeast("WildHammockTreesPerAttempt", WildHammockTreesPerAttempt, 0);
+        WildHammockGroundStarts = fix.AtLeast("WildHammockGroundStarts", WildHammockGroundStarts, 0);
+        WildHammockGroundRadius = fix.AtLeast("WildHammockGroundRadius", WildHammockGroundRadius, 0);
+        WildHammockRetryDays = fix.AtLeast("WildHammockRetryDays", WildHammockRetryDays, 0);
+        SpawnMinPlayerDistance = fix.AtLeast("SpawnMinPlayerDistance", SpawnMinPlayerDistance, 0);
+        SpawnMaxPlayerDistance = fix.NotBelow("SpawnMaxPlayerDistance", SpawnMaxPlayerDistance, "SpawnMinPlayerDistance", SpawnMinPlayerDistance);
+        SpawnMinForest = (float)fix.Between("SpawnMinForest", SpawnMinForest, 0, 1);
+        SpawnMaxTemperature = (float)fix.NotBelow("SpawnMaxTemperature", SpawnMaxTemperature, "SpawnMinTemperature", SpawnMinTemperature);
+        WildHammockMinHeight = fix.AtLeast("WildHammockMinHeight", WildHammockMinHeight, 0);
+        WildHammockMaxHeight = fix.NotBelow("WildHammockMaxHeight", WildHammockMaxHeight, "WildHammockMinHeight", WildHammockMinHeight);
+        WildSpawnRadiusFromHammock = fix.AtLeast("WildSpawnRadiusFromHammock", WildSpawnRadiusFromHammock, 0);
+        SpawnPositionTries = fix.AtLeast("SpawnPositionTries", SpawnPositionTries, 0);
+        SpawnMinKeptSpiderDistance = fix.AtLeast("SpawnMinKeptSpiderDistance", SpawnMinKeptSpiderDistance, 0);
+        return fix.Warnings;
+    }
 
     /// <summary>
     /// The jump fields as a JumpLimits object, the form the jump code in the Logic folder works with.

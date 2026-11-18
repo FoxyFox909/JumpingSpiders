@@ -83,7 +83,7 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
 
     // ---- State of the current attempt (in memory; an attempt lasts seconds) ----
 
-    /// <summary>What the attempt is doing now (read by debug tools).</summary>
+    /// <summary>What the attempt is doing now (StartForcedAttempt names it in its reply).</summary>
     public BuildPhase Phase = BuildPhase.None;
 
     /// <summary>The spot the current (or last) attempt picked, or null.</summary>
@@ -140,7 +140,8 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
         // Random cells tried per tick while picking the spot, and in all (each try is a few block lookups).
         pickTriesPerTick = taskConfig["pickTriesPerTick"].AsInt(40);
         pickMaxTries = taskConfig["pickMaxTries"].AsInt(400);
-        // Most jump-planner searches per attempt (each is about 1 ms; never more than one per tick).
+        // Most jump-planner searches per attempt (each well under a millisecond to a few milliseconds; never more than
+        // one per tick).
         maxPlanSearches = taskConfig["maxPlanSearches"].AsInt(2);
         // Jumps at a wall or ceiling tested per tick, and in all per attempt (each is one arc, far cheaper than a search).
         clingChecksPerTick = taskConfig["clingChecksPerTick"].AsInt(4);
@@ -172,14 +173,9 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
         buildAnimation = SpiderTaskUtil.ReadAnimation(taskConfig, "buildAnimation", "");
 
         runner = new JumpRunner(entity);
-        // Milliseconds: the crouch before each jump, a random time between these two.
-        runner.WindUpMinSeconds = taskConfig["windUpMinMs"].AsInt(350) / 1000f;
-        runner.WindUpMaxSeconds = taskConfig["windUpMaxMs"].AsInt(900) / 1000f;
-        // Milliseconds: rest on the intermediate perch between two jumps.
-        runner.PauseSeconds = taskConfig["pauseBetweenJumpsMs"].AsInt(300) / 1000f;
-        runner.TurnSpeedRadPerSec = turnSpeedRadPerSec;
-        runner.WindUpAnimation = SpiderTaskUtil.ReadAnimation(taskConfig, "windUpAnimation", "jumpwindup");
-        runner.JumpAnimation = SpiderTaskUtil.ReadAnimation(taskConfig, "jumpAnimation", "jump");
+        // windUpMinMs, windUpMaxMs, pauseBetweenJumpsMs, turnSpeedDegPerSec, windUpAnimation, jumpAnimation (see
+        // JumpRunner.ReadSettings).
+        runner.ReadSettings(taskConfig);
     }
 
     /// <summary>Nothing may interrupt the spider while it is in the air.</summary>
@@ -255,7 +251,10 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
             // Saved at once: whatever happens to this attempt, the next one is an interval away.
             SpiderAttributes.SetNextBuildAttemptHours(entity,
                 HammockBuildSchedule.NextAttemptHours(entity.World.Calendar.TotalHours, config.HammockBuildIntervalHours));
-            SpiderTaskUtil.Log(entity, LogName, "starts its hourly build attempt");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "starts its hourly build attempt");
+            }
         }
         if (presetSite != null)
         {
@@ -372,7 +371,10 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
             return;
         }
         Site = site;
-        SpiderTaskUtil.Log(entity, LogName, "picked " + DescribeSite(site) + " (try " + pickTriesDone + ")");
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "picked " + DescribeSite(site) + " (try " + pickTriesDone + ")");
+        }
         BlockEntitySilkHammock tooClose = FindHammockTooClose(site.Pos);
         if (tooClose != null)
         {
@@ -437,8 +439,11 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
             target.CellX, target.CellY, target.CellZ, SpiderTaskUtil.CreateLimits(), entity.World.Rand);
         if (plan != null && plan.Count > 0)
         {
-            SpiderTaskUtil.Log(entity, LogName, "jumps to " + SpiderTaskUtil.Format(target.FeetX, target.FeetY, target.FeetZ)
-                + " to build from there, " + plan.Count + " jump(s)");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "jumps to " + SpiderTaskUtil.Format(target.FeetX, target.FeetY, target.FeetZ)
+                    + " to build from there, " + plan.Count + " jump(s)");
+            }
             runner.Start(plan);
             Phase = BuildPhase.Jumping;
             return;
@@ -549,8 +554,11 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
             {
                 return;
             }
-            SpiderTaskUtil.Log(entity, LogName, "jump " + runner.State + " (" + runner.LastEndReason + ") at "
-                + SpiderTaskUtil.Format(entity.Pos.X, entity.Pos.Y, entity.Pos.Z));
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "jump " + runner.State + " (" + runner.LastEndReason + ") at "
+                    + SpiderTaskUtil.Format(entity.Pos.X, entity.Pos.Y, entity.Pos.Z));
+            }
         }
         if (entity.OnGround)
         {
@@ -575,8 +583,11 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
         // Missed (or bounced off something out of reach): back on its feet, try again from there.
         if (entity.OnGround)
         {
-            SpiderTaskUtil.Log(entity, LogName, "jump at the wall or ceiling missed (" + runner.LastEndReason + "), now at "
-                + SpiderTaskUtil.Format(entity.Pos.X, entity.Pos.Y, entity.Pos.Z));
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "jump at the wall or ceiling missed (" + runner.LastEndReason + "), now at "
+                    + SpiderTaskUtil.Format(entity.Pos.X, entity.Pos.Y, entity.Pos.Z));
+            }
             Phase = BuildPhase.FindingStances;
         }
     }
@@ -592,7 +603,10 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
         if (walkFailed)
         {
             StopWalk();
-            SpiderTaskUtil.Log(entity, LogName, "could not walk there");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "could not walk there");
+            }
             Phase = BuildPhase.FindingStances;
             return;
         }
@@ -663,8 +677,11 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
     {
         sidleTarget = target;
         Phase = BuildPhase.Sidling;
-        SpiderTaskUtil.Log(entity, LogName, (holding ? "crawls" : "sidles") + " " + HorizontalDistance(target.FeetX, target.FeetZ).ToString("0.00")
-            + " blocks onto its spot at " + SpiderTaskUtil.Format(target.FeetX, target.FeetY, target.FeetZ));
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, (holding ? "crawls" : "sidles") + " " + HorizontalDistance(target.FeetX, target.FeetZ).ToString("0.00")
+                + " blocks onto its spot at " + SpiderTaskUtil.Format(target.FeetX, target.FeetY, target.FeetZ));
+        }
     }
 
     // ---- 4: build ----
@@ -694,7 +711,10 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
         Phase = BuildPhase.Building;
         buildDoneMs = entity.World.ElapsedMilliseconds + buildTimeMs;
         SpiderTaskUtil.StartAnimation(entity, buildAnimation);
-        SpiderTaskUtil.Log(entity, LogName, "builds standing at " + SpiderTaskUtil.Format(entity.Pos.X, entity.Pos.Y, entity.Pos.Z));
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "builds standing at " + SpiderTaskUtil.Format(entity.Pos.X, entity.Pos.Y, entity.Pos.Z));
+        }
     }
 
     private void PlaceNow()
@@ -731,8 +751,11 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
         {
             where = "the ceiling";
         }
-        SpiderTaskUtil.Log(entity, LogName, "jumps at " + where + " to hold on at "
-            + SpiderTaskUtil.Format(stance.FeetX, stance.FeetY, stance.FeetZ));
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "jumps at " + where + " to hold on at "
+                + SpiderTaskUtil.Format(stance.FeetX, stance.FeetY, stance.FeetZ));
+        }
         List<JumpStep> plan = new List<JumpStep>();
         plan.Add(step);
         runner.Start(plan);
@@ -815,7 +838,10 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
         {
             heldOn = "the ceiling";
         }
-        SpiderTaskUtil.Log(entity, LogName, "holds on to " + heldOn + " at " + SpiderTaskUtil.Format(holdX, holdY, holdZ));
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "holds on to " + heldOn + " at " + SpiderTaskUtil.Format(holdX, holdY, holdZ));
+        }
         if (crawl)
         {
             StartSidling(clingTarget, true);
@@ -830,7 +856,10 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
         Phase = BuildPhase.Clinging;
         buildDoneMs = entity.World.ElapsedMilliseconds + buildTimeMs;
         SpiderTaskUtil.StartAnimation(entity, buildAnimation);
-        SpiderTaskUtil.Log(entity, LogName, "builds holding on to " + heldOn + " at " + SpiderTaskUtil.Format(entity.Pos.X, entity.Pos.Y, entity.Pos.Z));
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "builds holding on to " + heldOn + " at " + SpiderTaskUtil.Format(entity.Pos.X, entity.Pos.Y, entity.Pos.Z));
+        }
     }
 
     private void StartWalk(BuildStance target, string why)
@@ -850,7 +879,10 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
         walking = true;
         SpiderTaskUtil.StartAnimation(entity, walkAnimation);
         Phase = BuildPhase.Walking;
-        SpiderTaskUtil.Log(entity, LogName, "walks to " + SpiderTaskUtil.Format(target.FeetX, target.FeetY, target.FeetZ) + " " + why);
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "walks to " + SpiderTaskUtil.Format(target.FeetX, target.FeetY, target.FeetZ) + " " + why);
+        }
     }
 
     private void StopWalk()
@@ -903,18 +935,25 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
             }
         }
         LastOutcome = outcome;
-        string result = "no hammock";
-        if (succeeded)
+        if (SpiderTaskUtil.IsDebugLogOn() || forced)
         {
-            result = "success";
-        }
-        string summary = "attempt over (" + result + "): " + outcome + ". Cost: " + ticks + " ticks, worst tick "
-            + worstTickMs.ToString("0.00") + " ms (" + worstTickPhase + "), " + totalMs.ToString("0.0") + " ms in all, " + planSearches + " planner search(es), "
-            + (clingChecks + launchSpotChecks) + " wall/ceiling jump test(s), " + pickTriesDone + " pick tries.";
-        SpiderTaskUtil.Log(entity, LogName, summary);
-        if (forced)
-        {
-            Report("Spider id " + entity.EntityId + ": " + summary);
+            string result = "no hammock";
+            if (succeeded)
+            {
+                result = "success";
+            }
+            string summary = "attempt over (" + result + "): " + outcome + ". Cost: " + ticks + " ticks, worst tick "
+                + worstTickMs.ToString("0.00") + " ms (" + worstTickPhase + "), " + totalMs.ToString("0.0") + " ms in all, "
+                + planSearches + " planner search(es), " + (clingChecks + launchSpotChecks) + " wall/ceiling jump test(s), "
+                + pickTriesDone + " pick tries.";
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, summary);
+            }
+            if (forced)
+            {
+                Report("Spider id " + entity.EntityId + ": " + summary);
+            }
         }
         forced = false;
         reportTo = null;
@@ -925,8 +964,14 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
     public override void OnEntityHurt(DamageSource source, float damage)
     {
         base.OnEntityHurt(source, damage);
-        // Let go at once rather than in the next AI tick: the AI stops for good if this hit kills it.
-        Release();
+        // A hit makes a spider holding on to a wall or ceiling let go, and then it can no longer build there: the
+        // attempt fails. It lets go at once rather than in the next AI tick, because the AI stops for good if this hit
+        // kills it. A spider building on its feet carries on.
+        if (held)
+        {
+            Release();
+            Fail("let go of " + heldOn + " when it was hurt");
+        }
     }
 
     public override void OnEntityDespawn(EntityDespawnData reason)
@@ -1048,18 +1093,7 @@ public class AiTaskSpiderBuildHammock : AiTaskBase
 
     private BlockEntitySilkHammock FindHammockTooClose(BlockPos pos)
     {
-        int spacing = JumpingSpidersModSystem.Config.HammockSpacing;
-        List<BlockEntitySilkHammock> nearby = HammockFinder.FindAllWithin(entity.World, HammockFinder.CellCenter(pos),
-            HammockFinder.SpacingSearchRange(spacing));
-        for (int i = 0; i < nearby.Count; i++)
-        {
-            BlockPos other = nearby[i].Pos;
-            if (other.dimension == pos.dimension && HammockSpacing.Conflicts(pos.X, pos.Y, pos.Z, other.X, other.Y, other.Z, spacing))
-            {
-                return nearby[i];
-            }
-        }
-        return null;
+        return HammockFinder.FindHammockWithinSpacing(entity.World, pos, JumpingSpidersModSystem.Config.HammockSpacing);
     }
 
     private string DescribeSite(HammockSite site)

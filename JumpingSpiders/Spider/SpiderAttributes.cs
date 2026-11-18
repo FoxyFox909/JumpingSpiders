@@ -85,6 +85,12 @@ public static class SpiderAttributes
         return entity.Code.Domain == Domain && entity.Code.Path.StartsWith(CodePathPrefix);
     }
 
+    /// <summary>True for a spider that is alive; also a matcher for the game's entity searches.</summary>
+    public static bool IsLivingSpider(Entity entity)
+    {
+        return entity.Alive && IsSpider(entity);
+    }
+
     /// <summary>True for adult spiders (code jumpingspider-adult-...).</summary>
     public static bool IsAdult(Entity entity)
     {
@@ -197,6 +203,15 @@ public static class SpiderAttributes
         ITreeAttribute tree = GetOrCreateTree(entity);
         tree.SetBool(KeptByPlayerKey, true);
         MarkDirty(entity);
+    }
+
+    /// <summary>
+    /// True when the player keeps this spider (caught, placed, bred or fed; see DespawnRules), so it never despawns.
+    /// Reads the origin, which only the server has.
+    /// </summary>
+    public static bool IsKept(Entity entity)
+    {
+        return DespawnRules.IsKeptByPlayer(GetGeneration(entity), GetOrigin(entity), IsMarkedKeptByPlayer(entity));
     }
 
     /// <summary>The vanilla "origin" of the creature (entity.Attributes, server only), or null.</summary>

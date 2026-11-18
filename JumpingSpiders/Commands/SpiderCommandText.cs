@@ -74,7 +74,7 @@ public static class SpiderCommandText
         {
             origin = "none";
         }
-        bool kept = DespawnRules.IsKeptByPlayer(generation, SpiderAttributes.GetOrigin(spider), SpiderAttributes.IsMarkedKeptByPlayer(spider));
+        bool kept = SpiderAttributes.IsKept(spider);
         string keptText = "no (may despawn when no player is near)";
         if (kept)
         {

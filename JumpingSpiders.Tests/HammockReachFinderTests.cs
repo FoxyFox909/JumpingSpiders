@@ -12,7 +12,7 @@ namespace JumpingSpiders.Tests;
 public class HammockReachFinderTests
 {
     private static readonly RelativeBox HammockFloor = new RelativeBox(0, 0, 0, 1, 0.0625, 1);
-    private static readonly RelativeBox SpiderBox = new RelativeBox(-0.3, 0, -0.3, 0.3, 0.5, 0.3);
+    private static readonly RelativeBox SpiderBox = new RelativeBox(-0.4, 0, -0.4, 0.4, 0.4, 0.4);
 
     private static TestBlockWorld TreeWorld()
     {

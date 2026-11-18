@@ -153,6 +153,40 @@ public class JumpPlannerTests
     }
 
     [Fact]
+    public void SteepLaunchCannotPassThroughAThinPlate()
+    {
+        // A spider on a slab right under a 1/16 plate (like the floor of a hammock in the cell above) jumps steeply
+        // onto a pillar almost 4 blocks up. It rises about 0.5 blocks in its first physics tick, more than it is tall
+        // (0.4), so checking only where each tick ends would jump right over the plate; the engine's sweep stops it.
+        int tested = 0;
+        for (int angle = 60; angle <= 80; angle += 5)
+        {
+            JumpStep step = new JumpStep();
+            if (!JumpMath.SolveLaunchAtAngle(2, 3.9, 0, angle, new JumpLimits(), step))
+            {
+                continue;
+            }
+            step.FromX = 0.5;
+            step.FromY = 1.6;
+            step.FromZ = 0.5;
+            step.ToX = 2.5;
+            step.ToY = 5.5;
+            step.ToZ = 0.5;
+
+            TestBlockWorld world = FlatWorld();
+            world.SetBlock(0, 1, 0, 0.6);   // the slab it stands on
+            world.Fill(2, 1, 0, 2, 4, 0);   // the pillar it jumps onto, with a slab on top
+            world.SetBlock(2, 5, 0, 0.5);
+            Assert.True(JumpPlanner.IsArcClear(world, step), "no plate, " + angle + " degrees");
+
+            world.SetBlock(0, 2, 0, 0.0625);
+            Assert.False(JumpPlanner.IsArcClear(world, step), "plate, " + angle + " degrees");
+            tested++;
+        }
+        Assert.True(tested >= 3, "only " + tested + " angles could be solved");
+    }
+
+    [Fact]
     public void LandingRightAtTheEdgeOfAGapIsNotClear()
     {
         // The engine moves vertically before horizontally, so on its last tick in the air the spider comes down

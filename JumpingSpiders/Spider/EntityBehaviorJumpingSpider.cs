@@ -22,13 +22,15 @@ namespace JumpingSpiders;
 /// - OnKilledEntity: the spider killed something. Any kill makes it sated; a valid meal (farm-born chicken or
 ///   hare) credits breeding saturation and, for a domesticated adult, owes one hammock: the build task
 ///   (AiTaskSpiderBuildHammock) then makes an attempt every in-game hour while the spider is sated, until one
-///   succeeds. SpiderRegistration calls this for every kill through the game's global death event; AI tasks may call
-///   it too (a repeat call for the same victim is ignored).
+///   succeeds. SpiderRegistration calls this for every kill through the game's global death event, which the game
+///   fires once per death (Entity.Die does nothing for an entity that is already dead).
 /// - The "live prey only" rule: the vanilla eat task (needed so a baited basket trap lures the spider) adds
 ///   breeding saturation for every portion it eats. This behavior takes that back at once, so only meals
 ///   credited here count for breeding. See SaturationGuard.
 /// - Despawn protection: a spider the player caught, placed, bred or fed never despawns. See DespawnRules.
 /// - OnHammockBrokenWhileAsleep: a wild spider woken by a player breaking its hammock turns on that player.
+/// - OnEntityDeath: a spider that dies while held still (in a ceiling hammock's cradle, or against a wall while it
+///   builds) is let go and no longer asleep; its AI tasks, which would do that, stop running at death.
 /// - Info text: wild or domesticated, hungry or sated, asleep.
 /// - Per-sex model tweaks (client): both adult sexes share one model file, and OnTesselation scales the elements the
 ///   entity JSON lists in "elementScalesByType" (the female's smaller pedipalps). See ElementScales.
@@ -52,10 +54,6 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
 
     /// <summary>Despawn timer used for kept spiders: so large that it never runs out, in real seconds.</summary>
     private const float NeverDespawnSeconds = float.MaxValue;
-
-    // Entity id of the last victim credited, so a second report of the same kill is ignored. In memory only:
-    // a kill is reported within the same tick, long before any save.
-    private long lastCreditedVictimId = -1;
 
     // True while this behavior itself writes the saturation (EnforceSaturationLimit or CreditMeal), so the
     // "hunger" listener does not react to our own change.
@@ -127,6 +125,30 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
         base.OnEntityDespawn(despawn);
     }
 
+    /// <summary>
+    /// The game calls this when the spider dies, however it dies (also by /kill or entity.Die() without any damage).
+    /// The game stops running a dead entity's AI tasks, so a task that held the spider in a ceiling hammock's cradle or
+    /// against a wall never gets to undo that: it is undone here. Its physics runs again (the body drops to the floor)
+    /// and it is no longer asleep.
+    /// </summary>
+    public override void OnEntityDeath(DamageSource damageSourceForDeath)
+    {
+        base.OnEntityDeath(damageSourceForDeath);
+        if (entity.World.Side != EnumAppSide.Server)
+        {
+            return;
+        }
+        EntityAgent agent = entity as EntityAgent;
+        if (agent != null && SpiderTaskUtil.IsPhysicsPaused(agent))
+        {
+            SpiderTaskUtil.SetPhysicsPaused(agent, false);
+        }
+        if (SpiderAttributes.IsSleeping(entity))
+        {
+            SpiderAttributes.SetSleeping(entity, false);
+        }
+    }
+
     public override void OnGameTick(float deltaTime)
     {
         if (entity.World.Side != EnumAppSide.Server || !entity.Alive)
@@ -156,12 +178,6 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
         {
             return;
         }
-        if (victim.EntityId == lastCreditedVictimId)
-        {
-            return;
-        }
-        lastCreditedVictimId = victim.EntityId;
-
         JumpingSpidersConfig config = JumpingSpidersModSystem.Config;
 
         // Any kill: stop hunting prey and rivals for a while.
@@ -173,8 +189,11 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
         bool validMeal = MealRules.IsValidMeal(victim.Code.Path, victimGeneration, config.MealPreyCodePrefixes,
             config.MinPreyGenerationForMeal, isAdult);
 
-        entity.World.Logger.Debug("[jumpingspiders] {0} (id {1}) killed {2} (generation {3}); valid meal: {4}",
-            entity.Code, entity.EntityId, victim.Code, victimGeneration, validMeal);
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            entity.World.Logger.Debug("[jumpingspiders] {0} (id {1}) killed {2} (generation {3}); valid meal: {4}",
+                entity.Code, entity.EntityId, victim.Code, victimGeneration, validMeal);
+        }
 
         if (MealRules.ShouldBuildHammock(validMeal, isAdult, SpiderAttributes.IsDomesticated(entity), config.HammockNeedsFarmPrey))
         {
@@ -244,8 +263,11 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
             if (SaturationGuard.NeedsCorrection(current, credited))
             {
                 SpiderAttributes.SetBreedingSaturation(entity, allowed);
-                entity.World.Logger.Debug("[jumpingspiders] {0} (id {1}) ate something that was not live prey; breeding saturation kept at {2}",
-                    entity.Code, entity.EntityId, allowed);
+                if (SpiderTaskUtil.IsDebugLogOn())
+                {
+                    entity.World.Logger.Debug("[jumpingspiders] {0} (id {1}) ate something that was not live prey; breeding saturation kept at {2}",
+                        entity.Code, entity.EntityId, allowed);
+                }
             }
             if (allowed != credited)
             {
@@ -271,9 +293,7 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
     // would break; changing its timer is what vanilla does for dropped player items.)
     private void UpdateDespawnProtection()
     {
-        bool kept = DespawnRules.IsKeptByPlayer(SpiderAttributes.GetGeneration(entity), SpiderAttributes.GetOrigin(entity),
-            SpiderAttributes.IsMarkedKeptByPlayer(entity));
-        if (!kept)
+        if (!SpiderAttributes.IsKept(entity))
         {
             return;
         }
@@ -323,8 +343,11 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
         // The random value 0 passes the state's "chance" roll, so breaking the hammock always angers the spider.
         // The state's own "maxGeneration" (0 in the JSON) still applies.
         bool triggered = emotions.TryTriggerState(AggressiveStateCode, 0.0, playerEntityId);
-        entity.World.Logger.Debug("[jumpingspiders] {0} (id {1}) woken by a broken hammock; aggressive: {2}",
-            entity.Code, entity.EntityId, triggered);
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            entity.World.Logger.Debug("[jumpingspiders] {0} (id {1}) woken by a broken hammock; aggressive: {2}",
+                entity.Code, entity.EntityId, triggered);
+        }
     }
 
     // ---------------- Model: per-sex element scales ----------------

@@ -14,7 +14,7 @@ namespace JumpingSpiders;
 /// The plain silkhammock-up and silkhammock-down open west: they are the two original variants, and existing worlds
 /// hold them under those codes, so the code of a hammock opening west stays as it was and only the three new
 /// directions get a suffix. All twelve are states of the one "side" variant group ("up-north" is one state), so no
-/// existing block code changed. Read the support and the opening with GetSupportFacing and GetOpeningFacing, never
+/// existing block code changed. Read the support with GetSupportFacing (the opening is used by GetSleepYaw), never
 /// from the code text, and get a variant with GetVariant.
 ///
 /// Vintage Story concepts used here:
@@ -66,12 +66,6 @@ public class BlockSilkHammock : Block
     private float shearsSpeedMultiplier = 1;
     private double sleepFeetHeight;
 
-    /// <summary>True when the block is any silk hammock variant.</summary>
-    public static bool IsHammock(Block block)
-    {
-        return block is BlockSilkHammock;
-    }
-
     /// <summary>
     /// The hammock variant whose support is in the given direction (north/east/south/west = wall, up = ceiling,
     /// down = floor), or null if the block is not loaded. For a ceiling or floor this is the one opening west; every
@@ -115,14 +109,7 @@ public class BlockSilkHammock : Block
         bool[] blocked = new bool[4];
         for (int i = 0; i < 4; i++)
         {
-            BlockPos side = pos.AddCopy(BlockFacing.HORIZONTALS[i]);
-            Block block = blockAccessor.GetBlock(side);
-            if (block == null || block.Id == 0)
-            {
-                continue;
-            }
-            Cuboidf[] boxes = block.GetCollisionBoxes(blockAccessor, side);
-            blocked[i] = boxes != null && boxes.Length > 0;
+            blocked[i] = HammockBuilder.HasCollisionBoxes(blockAccessor, pos.AddCopy(BlockFacing.HORIZONTALS[i]));
         }
         return blocked;
     }
@@ -226,12 +213,6 @@ public class BlockSilkHammock : Block
     public BlockFacing GetSupportFacing()
     {
         return supportFacing;
-    }
-
-    /// <summary>Direction the hammock's opening faces (always horizontal): away from the wall, or as the variant says.</summary>
-    public BlockFacing GetOpeningFacing()
-    {
-        return openingFacing;
     }
 
     /// <summary>True when the support of this variant is still there at pos.</summary>

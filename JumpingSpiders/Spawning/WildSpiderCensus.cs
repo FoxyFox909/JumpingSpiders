@@ -45,15 +45,13 @@ public class WildSpiderCensus
         float horizontalRange = (float)(size * Math.Sqrt(0.5) + reach);
         float verticalRange = world.BlockAccessor.MapSizeY;
         Vec3d center = new Vec3d(minX + size / 2.0, world.SeaLevel, minZ + size / 2.0);
-        Entity[] spiders = world.GetEntitiesAround(center, horizontalRange, verticalRange, IsLivingSpider);
+        Entity[] spiders = world.GetEntitiesAround(center, horizontalRange, verticalRange, SpiderAttributes.IsLivingSpider);
 
         for (int i = 0; i < spiders.Length; i++)
         {
             Entity spider = spiders[i];
             double distance = DistanceToRect(spider.Pos.X, spider.Pos.Z, minX, minZ, maxX, maxZ);
-            bool kept = DespawnRules.IsKeptByPlayer(SpiderAttributes.GetGeneration(spider), SpiderAttributes.GetOrigin(spider),
-                SpiderAttributes.IsMarkedKeptByPlayer(spider));
-            if (kept)
+            if (SpiderAttributes.IsKept(spider))
             {
                 if (distance <= config.SpawnMinKeptSpiderDistance)
                 {
@@ -79,12 +77,6 @@ public class WildSpiderCensus
             }
         }
         return census;
-    }
-
-    // Matcher for the entity query: our spiders that are alive.
-    private static bool IsLivingSpider(Entity entity)
-    {
-        return entity.Alive && SpiderAttributes.IsSpider(entity);
     }
 
     // Horizontal distance from a point to a rectangle (0 inside it).

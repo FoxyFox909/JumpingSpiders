@@ -69,7 +69,7 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
 
     // ---- State of the current attack ----
 
-    /// <summary>What the attack is doing now (read by debug tools).</summary>
+    /// <summary>What the attack is doing now.</summary>
     public AttackPhase Phase = AttackPhase.None;
 
     private readonly WindUp windUp;
@@ -91,7 +91,7 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         // whenInEmotionState, retaliateAttacks.
 
         // Blocks: how far away it notices a target.
-        seekingRange = taskConfig["seekingRange"].AsFloat(8);
+        seekingRange = taskConfig["seekingRange"].AsFloat(10);
         // Blocks: it gives up once the target is farther than this.
         loseTargetRange = taskConfig["loseTargetRange"].AsFloat(16);
         // Blocks: it starts winding up once the target is this close (and one jump can reach it).
@@ -284,8 +284,11 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         approachFailed = false;
         walking = false;
         hitDone = false;
-        SpiderTaskUtil.Log(entity, LogName, "targets " + targetEntity.Code + " " + targetEntity.EntityId
-            + " at " + SpiderTaskUtil.Distance(entity, targetEntity).ToString("0.00") + " blocks");
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "targets " + targetEntity.Code + " " + targetEntity.EntityId
+                + " at " + SpiderTaskUtil.Distance(entity, targetEntity).ToString("0.00") + " blocks");
+        }
     }
 
     public override bool ContinueExecute(float dt)
@@ -296,13 +299,19 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         }
         if (SpiderTaskUtil.IsGone(entity, targetEntity))
         {
-            SpiderTaskUtil.Log(entity, LogName, "target gone during " + Phase);
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "target gone during " + Phase);
+            }
             return false;
         }
         double distance = SpiderTaskUtil.Distance(entity, targetEntity);
         if (distance > loseTargetRange)
         {
-            SpiderTaskUtil.Log(entity, LogName, "target escaped (" + distance.ToString("0.0") + " blocks)");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "target escaped (" + distance.ToString("0.0") + " blocks)");
+            }
             return false;
         }
         if (Phase == AttackPhase.Approach)
@@ -321,12 +330,18 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         long now = entity.World.ElapsedMilliseconds;
         if (approachFailed)
         {
-            SpiderTaskUtil.Log(entity, LogName, "no way to walk to the target");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "no way to walk to the target");
+            }
             return false;
         }
         if (now > approachDeadlineMs)
         {
-            SpiderTaskUtil.Log(entity, LogName, "gave up stalking after " + maxApproachMs + " ms");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "gave up stalking after " + maxApproachMs + " ms");
+            }
             return false;
         }
 
@@ -353,8 +368,11 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         StopWalkingToTarget();
         windUp.Begin(windUpMinMs / 1000f, windUpMaxMs / 1000f, windUpAnimation, entity.World.Rand);
         Phase = AttackPhase.WindUp;
-        SpiderTaskUtil.Log(entity, LogName, "winds up for " + windUp.DurationSeconds.ToString("0.00") + " s, target at "
-            + SpiderTaskUtil.Distance(entity, targetEntity).ToString("0.00") + " blocks");
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "winds up for " + windUp.DurationSeconds.ToString("0.00") + " s, target at "
+                + SpiderTaskUtil.Distance(entity, targetEntity).ToString("0.00") + " blocks");
+        }
     }
 
     private bool ContinueWindUp(float dt)
@@ -368,19 +386,28 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         // The wind-up is over. The target has moved meanwhile: decide now what to do about where it is.
         if (IsWithinBite())
         {
-            SpiderTaskUtil.Log(entity, LogName, "target within reach, bites without leaping");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "target within reach, bites without leaping");
+            }
             Bite();
             return false;
         }
         if (!entity.OnGround)
         {
-            SpiderTaskUtil.Log(entity, LogName, "not on the ground after the wind-up, no leap");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "not on the ground after the wind-up, no leap");
+            }
             return false;
         }
         JumpStep step = PlanPounce(true);
         if (step == null)
         {
-            SpiderTaskUtil.Log(entity, LogName, "target out of reach after the wind-up, no leap");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "target out of reach after the wind-up, no leap");
+            }
             return false;
         }
         List<JumpStep> plan = new List<JumpStep>();
@@ -388,9 +415,12 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         runner.Start(plan);
         flightPointsChecked = 0;
         Phase = AttackPhase.Leap;
-        SpiderTaskUtil.Log(entity, LogName, "leaps from " + SpiderTaskUtil.Format(step.FromX, step.FromY, step.FromZ)
-            + " to " + SpiderTaskUtil.Format(step.ToX, step.ToY, step.ToZ) + ", flight " + FlightSecondsOf(step).ToString("0.000")
-            + " s; target at " + SpiderTaskUtil.Format(targetEntity.Pos.X, targetEntity.Pos.Y, targetEntity.Pos.Z));
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "leaps from " + SpiderTaskUtil.Format(step.FromX, step.FromY, step.FromZ)
+                + " to " + SpiderTaskUtil.Format(step.ToX, step.ToY, step.ToZ) + ", flight " + FlightSecondsOf(step).ToString("0.000")
+                + " s; target at " + SpiderTaskUtil.Format(targetEntity.Pos.X, targetEntity.Pos.Y, targetEntity.Pos.Z));
+        }
         return true;
     }
 
@@ -410,8 +440,11 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         {
             result = "hit";
         }
-        SpiderTaskUtil.Log(entity, LogName, "leap over (" + runner.LastEndReason + ", " + result + "), landed at "
-            + SpiderTaskUtil.Format(entity.Pos.X, entity.Pos.Y, entity.Pos.Z));
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "leap over (" + runner.LastEndReason + ", " + result + "), landed at "
+                + SpiderTaskUtil.Format(entity.Pos.X, entity.Pos.Y, entity.Pos.Z));
+        }
         return false;
     }
 
@@ -422,7 +455,10 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         StopWalkingToTarget();
         if (cancelled)
         {
-            SpiderTaskUtil.Log(entity, LogName, "interrupted during " + Phase);
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "interrupted during " + Phase);
+            }
         }
         Phase = AttackPhase.None;
         base.FinishExecute(cancelled);
@@ -544,8 +580,11 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         source.DamageTier = damageTier;
         source.KnockbackStrength = knockbackStrength;
         bool hurt = targetEntity.ReceiveDamage(source, damage * GlobalConstants.CreatureDamageModifier);
-        SpiderTaskUtil.Log(entity, LogName, "bites " + targetEntity.Code + " " + targetEntity.EntityId + " for " + damage
-            + " (damage taken: " + hurt + ", target alive: " + targetEntity.Alive + ")");
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "bites " + targetEntity.Code + " " + targetEntity.EntityId + " for " + damage
+                + " (damage taken: " + hurt + ", target alive: " + targetEntity.Alive + ")");
+        }
     }
 
     private void WalkTowardsTarget()

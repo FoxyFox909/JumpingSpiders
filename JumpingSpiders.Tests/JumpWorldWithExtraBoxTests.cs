@@ -21,7 +21,7 @@ public class JumpWorldWithExtraBoxTests
         return world;
     }
 
-    // The test world's spider is HalfWidth 0.3 each way and Height 0.5 tall.
+    // The test world's spider box (by default the adult's, HalfWidth 0.4 each way and Height 0.4 tall).
     private static JumpWorldWithExtraBox WithHammockFloor(TestBlockWorld world, int x, int y, int z)
     {
         return new JumpWorldWithExtraBox(world, x, y, z,

@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
@@ -44,8 +43,8 @@ namespace JumpingSpiders;
 /// Getting there (SleepPhase):
 /// - Travelling: JumpPlanner plans up to Config.MaxPlannedJumps jumps into the hammock's cell; JumpRunner does them,
 ///   each with a short wind-up.
-/// - Walking: when no plan exists from here, LaunchSpotFinder finds a spot from which one does, and the game's
-///   pathfinder walks there; then it plans again.
+/// - Walking: when no plan exists from here, LaunchSpotFinder finds a spot from which one does (one planner search per
+///   tick, at most maxLaunchSpotPlanChecks of them), and the game's pathfinder walks there; then it plans again.
 /// - It gives up on the hammock (and sleeps on the spot) after maxTravelAttempts plans, after travelTimeoutMs, or
 ///   when there is no launch spot or no walking path.
 ///
@@ -99,13 +98,14 @@ public class AiTaskSpiderSleep : AiTaskBase
 
     // ---- State of the current night ----
 
-    /// <summary>What the task is doing now (read by debug tools).</summary>
+    /// <summary>What the task is doing now.</summary>
     public SleepPhase Phase = SleepPhase.None;
 
     /// <summary>The hammock this spider is going to or sleeping in, or null (sleeping on the spot).</summary>
     public BlockPos HammockPos;
 
     private readonly JumpRunner runner;
+    private LaunchSpotFinder launchSpotFinder;
     private long nextStartCheckMs;
     private long nextWakeCheckMs;
     private long travelDeadlineMs;
@@ -139,7 +139,8 @@ public class AiTaskSpiderSleep : AiTaskBase
         moveSpeed = taskConfig["movespeed"].AsFloat(0.02f);
         // Blocks: how far around the hammock (horizontally) it looks for a spot to jump up from.
         launchSpotSearchRadius = taskConfig["launchSpotSearchRadius"].AsInt(6);
-        // How many candidate launch spots are checked with the planner per attempt (each check is one full plan, about 1 ms).
+        // How many candidate launch spots are checked with the planner per attempt: one full plan each, one per tick,
+        // up to a few milliseconds each when the hammock cannot be reached.
         maxLaunchSpotPlanChecks = taskConfig["maxLaunchSpotPlanChecks"].AsInt(8);
         // How many times per night it plans its way to the hammock before giving up and sleeping on the spot.
         maxTravelAttempts = taskConfig["maxTravelAttempts"].AsInt(3);
@@ -153,15 +154,9 @@ public class AiTaskSpiderSleep : AiTaskBase
         wakeOnHurt = taskConfig["wakeOnHurt"].AsBool(true);
 
         runner = new JumpRunner(entity);
-        // Milliseconds: the short crouch before each jump up to the hammock, a random time between these two.
-        runner.WindUpMinSeconds = taskConfig["windUpMinMs"].AsInt(200) / 1000f;
-        runner.WindUpMaxSeconds = taskConfig["windUpMaxMs"].AsInt(400) / 1000f;
-        // Milliseconds: rest on the intermediate perch between the two jumps.
-        runner.PauseSeconds = taskConfig["pauseBetweenJumpsMs"].AsInt(300) / 1000f;
-        // Degrees per second: how fast it turns towards the jump direction during the crouch.
-        runner.TurnSpeedRadPerSec = taskConfig["turnSpeedDegPerSec"].AsFloat(360) * (float)Math.PI / 180f;
-        runner.WindUpAnimation = SpiderTaskUtil.ReadAnimation(taskConfig, "windUpAnimation", "jumpwindup");
-        runner.JumpAnimation = SpiderTaskUtil.ReadAnimation(taskConfig, "jumpAnimation", "jump");
+        // windUpMinMs, windUpMaxMs, pauseBetweenJumpsMs, turnSpeedDegPerSec, windUpAnimation, jumpAnimation (see
+        // JumpRunner.ReadSettings).
+        runner.ReadSettings(taskConfig);
     }
 
     /// <summary>Uninterruptible in the air; hard to interrupt while asleep (see asleepPriorityForCancel).</summary>
@@ -216,16 +211,22 @@ public class AiTaskSpiderSleep : AiTaskBase
             if (!stayingUp)
             {
                 stayingUp = true;
-                SpiderTaskUtil.Log(entity, LogName, "stays up after dusk, for up to "
-                    + SpiderAttributes.GetStayUpHours(entity).ToString("0.0") + " h (curiosity "
-                    + SpiderAttributes.GetDailyCuriosity(entity).ToString("0.00") + ")");
+                if (SpiderTaskUtil.IsDebugLogOn())
+                {
+                    SpiderTaskUtil.Log(entity, LogName, "stays up after dusk, for up to "
+                        + SpiderAttributes.GetStayUpHours(entity).ToString("0.0") + " h (curiosity "
+                        + SpiderAttributes.GetDailyCuriosity(entity).ToString("0.00") + ")");
+                }
             }
             return false;
         }
         if (stayingUp)
         {
             stayingUp = false;
-            SpiderTaskUtil.Log(entity, LogName, "has stayed up long enough: goes to bed");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "has stayed up long enough: goes to bed");
+            }
         }
         return true;
     }
@@ -246,7 +247,10 @@ public class AiTaskSpiderSleep : AiTaskBase
             // everyone's range at dawn or when its nap ended): just be awake.
             SpiderAttributes.SetSleeping(entity, false);
             SpiderAttributes.ClearNap(entity);
-            SpiderTaskUtil.Log(entity, LogName, "was saved asleep, but it is day: awake");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "was saved asleep, but it is day: awake");
+            }
             return false;
         }
         if (IsOnCooldown() || !PreconditionsSatisfied())
@@ -268,9 +272,12 @@ public class AiTaskSpiderSleep : AiTaskBase
         double chance = SpiderAttributes.GetNapChance(entity);
         double roll = entity.World.Rand.NextDouble();
         bool won = roll < chance;
-        SpiderTaskUtil.Log(entity, LogName, "nap roll for slot " + slot + " of day " + day + ": chance "
-            + chance.ToString("0.000") + " (curiosity " + SpiderAttributes.GetDailyCuriosity(entity).ToString("0.00")
-            + "), rolled " + roll.ToString("0.000") + ": " + (won ? "naps" : "stays up"));
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "nap roll for slot " + slot + " of day " + day + ": chance "
+                + chance.ToString("0.000") + " (curiosity " + SpiderAttributes.GetDailyCuriosity(entity).ToString("0.00")
+                + "), rolled " + roll.ToString("0.000") + ": " + (won ? "naps" : "stays up"));
+        }
         if (!won)
         {
             return false;
@@ -295,6 +302,7 @@ public class AiTaskSpiderSleep : AiTaskBase
         hurt = false;
         travelAttempts = 0;
         walking = false;
+        launchSpotFinder = null;
         HammockPos = null;
         Phase = SleepPhase.None;
         nextWakeCheckMs = entity.World.ElapsedMilliseconds + checkIntervalMs;
@@ -334,18 +342,27 @@ public class AiTaskSpiderSleep : AiTaskBase
         }
         if (hurt && wakeOnHurt)
         {
-            SpiderTaskUtil.Log(entity, LogName, "woken by getting hurt");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "woken by getting hurt");
+            }
             return false;
         }
         if (HammockPos != null && Phase != SleepPhase.Leaving && HammockFinder.GetHammockAt(entity.World, HammockPos) == null)
         {
-            SpiderTaskUtil.Log(entity, LogName, "hammock at " + HammockPos + " is gone (" + Phase + ")");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "hammock at " + HammockPos + " is gone (" + Phase + ")");
+            }
             HammockPos = null;
             return false;
         }
         if (Phase == SleepPhase.Asleep && !SpiderAttributes.IsSleeping(entity))
         {
-            SpiderTaskUtil.Log(entity, LogName, "woken up (sleeping flag cleared)");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "woken up (sleeping flag cleared)");
+            }
             return false;
         }
 
@@ -358,7 +375,10 @@ public class AiTaskSpiderSleep : AiTaskBase
                 // Dusk came during the nap: it simply goes on as the night's sleep (and wakes in the morning).
                 napping = false;
                 SpiderAttributes.ClearNap(entity);
-                SpiderTaskUtil.Log(entity, LogName, "the nap ran into the night: sleeps on until morning");
+                if (SpiderTaskUtil.IsDebugLogOn())
+                {
+                    SpiderTaskUtil.Log(entity, LogName, "the nap ran into the night: sleeps on until morning");
+                }
             }
             else if (napping)
             {
@@ -371,7 +391,10 @@ public class AiTaskSpiderSleep : AiTaskBase
             {
                 if (Phase != SleepPhase.Asleep)
                 {
-                    SpiderTaskUtil.Log(entity, LogName, "morning came before it got to sleep");
+                    if (SpiderTaskUtil.IsDebugLogOn())
+                    {
+                        SpiderTaskUtil.Log(entity, LogName, "morning came before it got to sleep");
+                    }
                     return false;
                 }
                 BeginLeaving("morning");
@@ -381,6 +404,10 @@ public class AiTaskSpiderSleep : AiTaskBase
         if (Phase == SleepPhase.Travelling)
         {
             return ContinueTravelling(dt, now);
+        }
+        if (Phase == SleepPhase.FindingLaunchSpot)
+        {
+            return ContinueFindingLaunchSpot(now);
         }
         if (Phase == SleepPhase.Walking)
         {
@@ -412,8 +439,11 @@ public class AiTaskSpiderSleep : AiTaskBase
             {
                 return true;
             }
-            SpiderTaskUtil.Log(entity, LogName, "jumps " + runner.State + " (" + runner.StepsDone + " landed, last "
-                + runner.LastEndReason + ") at " + SpiderTaskUtil.Format(entity.Pos.X, entity.Pos.Y, entity.Pos.Z));
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "jumps " + runner.State + " (" + runner.StepsDone + " landed, last "
+                    + runner.LastEndReason + ") at " + SpiderTaskUtil.Format(entity.Pos.X, entity.Pos.Y, entity.Pos.Z));
+            }
         }
         if (runner.State == JumpRunState.Reached && IsInHammockCell())
         {
@@ -431,6 +461,30 @@ public class AiTaskSpiderSleep : AiTaskBase
             return true;
         }
         StartTravel();
+        return true;
+    }
+
+    // One planner search per tick for a spot to walk to (StartTravel found no jumps from here).
+    private bool ContinueFindingLaunchSpot(long now)
+    {
+        if (now > travelDeadlineMs)
+        {
+            GiveUpHammock("took too long");
+            return true;
+        }
+        launchSpotFinder.CheckNext(entity.World.Rand);
+        if (!launchSpotFinder.IsDone())
+        {
+            return true;
+        }
+        JumpPlanNode spot = launchSpotFinder.Found;
+        launchSpotFinder = null;
+        if (spot == null)
+        {
+            GiveUpHammock("no spot to jump up from");
+            return true;
+        }
+        StartWalk(spot);
         return true;
     }
 
@@ -461,9 +515,10 @@ public class AiTaskSpiderSleep : AiTaskBase
         {
             hurt = true;
         }
-        // Let go at once rather than in the next AI tick: the AI stops for good if this hit kills it, and a dead
-        // spider must not stay held up in the cradle.
-        if (heldInCradle)
+        // A hit that wakes it (wakeOnHurt) or kills it lets go of the cradle at once rather than in the next AI tick:
+        // the AI stops for good if this hit kills it, and a dead spider must not stay held up there. A spider that
+        // sleeps on (wakeOnHurt false) stays in its cradle.
+        if (heldInCradle && (wakeOnHurt || !entity.Alive))
         {
             HoldStill(false);
         }
@@ -492,9 +547,13 @@ public class AiTaskSpiderSleep : AiTaskBase
         }
         if (cancelled)
         {
-            SpiderTaskUtil.Log(entity, LogName, "interrupted (" + Phase + ")");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "interrupted (" + Phase + ")");
+            }
         }
         HammockPos = null;
+        launchSpotFinder = null;
         Phase = SleepPhase.None;
         base.FinishExecute(cancelled);
     }
@@ -519,14 +578,20 @@ public class AiTaskSpiderSleep : AiTaskBase
                 BlockEntitySilkHammock homeHammock = HammockFinder.GetHammockAt(world, home);
                 if (distance > config.HomeHammockForgetDistance || (loaded && homeHammock == null))
                 {
-                    SpiderTaskUtil.Log(entity, LogName, "forgets its home hammock at " + home + " (distance "
-                        + distance.ToString("0.0") + ", still there: " + (homeHammock != null) + ")");
+                    if (SpiderTaskUtil.IsDebugLogOn())
+                    {
+                        SpiderTaskUtil.Log(entity, LogName, "forgets its home hammock at " + home + " (distance "
+                            + distance.ToString("0.0") + ", still there: " + (homeHammock != null) + ")");
+                    }
                     SpiderAttributes.ClearHomeHammock(entity);
                     home = null;
                 }
                 else if (homeHammock != null && homeHammock.TryOccupy(entity))
                 {
-                    SpiderTaskUtil.Log(entity, LogName, "goes to its home hammock at " + home);
+                    if (SpiderTaskUtil.IsDebugLogOn())
+                    {
+                        SpiderTaskUtil.Log(entity, LogName, "goes to its home hammock at " + home);
+                    }
                     return home;
                 }
             }
@@ -535,23 +600,33 @@ public class AiTaskSpiderSleep : AiTaskBase
         BlockEntitySilkHammock free = HammockFinder.FindNearestFree(world, entity.Pos.XYZ, config.HammockSleepSearchRange, entity);
         if (free == null || !free.TryOccupy(entity))
         {
-            SpiderTaskUtil.Log(entity, LogName, "no free hammock within " + config.HammockSleepSearchRange + " blocks");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "no free hammock within " + config.HammockSleepSearchRange + " blocks");
+            }
             return null;
         }
         BlockPos chosen = free.Pos.Copy();
         if (wild && home == null)
         {
             SpiderAttributes.SetHomeHammock(entity, chosen);
-            SpiderTaskUtil.Log(entity, LogName, "adopts the hammock at " + chosen + " as its home");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "adopts the hammock at " + chosen + " as its home");
+            }
         }
         else
         {
-            SpiderTaskUtil.Log(entity, LogName, "goes to the free hammock at " + chosen);
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "goes to the free hammock at " + chosen);
+            }
         }
         return chosen;
     }
 
-    // Plans the jumps from here, or walks to a spot from which they exist. Every call counts as one attempt.
+    // Plans the jumps from here, or looks for a spot to walk to from which they exist (over the next ticks, see
+    // ContinueFindingLaunchSpot). Every call counts as one attempt. At most one planner search in this tick.
     private void StartTravel()
     {
         travelAttempts++;
@@ -572,20 +647,24 @@ public class AiTaskSpiderSleep : AiTaskBase
                 FallAsleep();
                 return;
             }
-            SpiderTaskUtil.Log(entity, LogName, "jumps to the hammock in " + plan.Count + " jump(s), attempt " + travelAttempts);
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "jumps to the hammock in " + plan.Count + " jump(s), attempt " + travelAttempts);
+            }
             runner.Start(plan);
             Phase = SleepPhase.Travelling;
             return;
         }
 
-        JumpPlanNode spot = LaunchSpotFinder.Find(world, entity.Pos.X, entity.Pos.Y, entity.Pos.Z,
+        launchSpotFinder = new LaunchSpotFinder(world, entity.Pos.X, entity.Pos.Y, entity.Pos.Z,
             HammockPos.X, HammockPos.Y, HammockPos.Z, limits, launchSpotSearchRadius, WalkStepUpBlocks, WalkStepDownBlocks,
-            maxLaunchSpotPlanChecks, entity.World.Rand);
-        if (spot == null)
-        {
-            GiveUpHammock("no spot to jump up from");
-            return;
-        }
+            maxLaunchSpotPlanChecks);
+        Phase = SleepPhase.FindingLaunchSpot;
+    }
+
+    // Walks (the game's pathfinder) to the launch spot; arriving there leads to StartTravel again.
+    private void StartWalk(JumpPlanNode spot)
+    {
         walkArrived = false;
         walkFailed = false;
         pathTraverser.Stop();
@@ -599,13 +678,19 @@ public class AiTaskSpiderSleep : AiTaskBase
         walking = true;
         SpiderTaskUtil.StartAnimation(entity, walkAnimation);
         Phase = SleepPhase.Walking;
-        SpiderTaskUtil.Log(entity, LogName, "walks to " + SpiderTaskUtil.Format(spot.FeetX, spot.FeetY, spot.FeetZ)
-            + " to jump up from there, attempt " + travelAttempts);
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "walks to " + SpiderTaskUtil.Format(spot.FeetX, spot.FeetY, spot.FeetZ)
+                + " to jump up from there, attempt " + travelAttempts);
+        }
     }
 
     private void GiveUpHammock(string reason)
     {
-        SpiderTaskUtil.Log(entity, LogName, "gives up on the hammock at " + HammockPos + ": " + reason);
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "gives up on the hammock at " + HammockPos + ": " + reason);
+        }
         ReleaseHammock();
         HammockPos = null;
         if (napping)
@@ -619,7 +704,10 @@ public class AiTaskSpiderSleep : AiTaskBase
     // A nap that cannot happen: the task ends at its next tick, the spider stays awake.
     private void EndNap(string reason)
     {
-        SpiderTaskUtil.Log(entity, LogName, reason);
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, reason);
+        }
         runner.Stop();
         pathTraverser.Stop();
         StopWalkingAnimation();
@@ -671,16 +759,25 @@ public class AiTaskSpiderSleep : AiTaskBase
         Phase = SleepPhase.Asleep;
         if (HammockPos != null && napping)
         {
-            SpiderTaskUtil.Log(entity, LogName, "naps in the hammock at " + HammockPos + " until hour "
-                + NapSchedule.HourOfDay(SpiderAttributes.GetNapUntilHours(entity), entity.World.Calendar.HoursPerDay).ToString("0.00"));
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "naps in the hammock at " + HammockPos + " until hour "
+                    + NapSchedule.HourOfDay(SpiderAttributes.GetNapUntilHours(entity), entity.World.Calendar.HoursPerDay).ToString("0.00"));
+            }
         }
         else if (HammockPos != null)
         {
-            SpiderTaskUtil.Log(entity, LogName, "falls asleep in the hammock at " + HammockPos);
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "falls asleep in the hammock at " + HammockPos);
+            }
         }
         else
         {
-            SpiderTaskUtil.Log(entity, LogName, "falls asleep on the spot at " + SpiderTaskUtil.Format(entity.Pos.X, entity.Pos.Y, entity.Pos.Z));
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "falls asleep on the spot at " + SpiderTaskUtil.Format(entity.Pos.X, entity.Pos.Y, entity.Pos.Z));
+            }
         }
     }
 
@@ -738,7 +835,10 @@ public class AiTaskSpiderSleep : AiTaskBase
             napping = false;
             SpiderAttributes.ClearNap(entity);
         }
-        SpiderTaskUtil.Log(entity, LogName, "wakes up: " + why);
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "wakes up: " + why);
+        }
         if (leaveJumpRadius <= 0 || !standing)
         {
             return;
@@ -749,7 +849,10 @@ public class AiTaskSpiderSleep : AiTaskBase
         if (plan != null)
         {
             JumpStep step = plan[0];
-            SpiderTaskUtil.Log(entity, LogName, "hops out to " + SpiderTaskUtil.Format(step.ToX, step.ToY, step.ToZ));
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "hops out to " + SpiderTaskUtil.Format(step.ToX, step.ToY, step.ToZ));
+            }
             runner.Start(plan);
         }
     }

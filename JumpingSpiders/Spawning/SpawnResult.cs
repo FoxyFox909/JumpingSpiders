@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using Vintagestory.API.Common.Entities;
-using Vintagestory.API.MathTools;
 
 namespace JumpingSpiders;
 
@@ -15,20 +14,8 @@ public class SpawnResult
     /// <summary>The new spider, or null.</summary>
     public Entity Spider;
 
-    /// <summary>The spider's home hammock, or null when it has none.</summary>
-    public BlockPos Hammock;
-
-    /// <summary>True when the home hammock already existed (the chunk's record, or one found nearby).</summary>
-    public bool HammockReused;
-
-    /// <summary>True when this attempt placed a new hammock on a tree.</summary>
-    public bool HammockPlaced;
-
     /// <summary>For a newly placed hammock: blocks above the trunk base. -1 otherwise.</summary>
     public int HammockHeight = -1;
-
-    /// <summary>True when the spider wanted a hammock but the chunk has no usable tree (searched now or recently).</summary>
-    public bool NoUsableTree;
 
     /// <summary>True when the spider spawned asleep inside its hammock.</summary>
     public bool InHammock;
@@ -40,9 +27,8 @@ public class SpawnResult
     public int TrunksFound;
     public int TrunksTested;
 
-    /// <summary>Hammock spots that were tested, and how many of them a spider could jump into.</summary>
+    /// <summary>Hammock spots that were tested.</summary>
     public int SpotsTested;
-    public int SpotsReachable;
 
     /// <summary>
     /// For a forced spawn (SpawnRequest.Forced): one sentence for each natural rule that would have refused this

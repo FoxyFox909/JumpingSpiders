@@ -131,6 +131,8 @@ public static class HammockOpening
     /// The rotateY (degrees) the block JSON gives the model so that it opens towards opening: for a ceiling hammock
     /// (model upright) west 0, south 90, east 180, north 270; for a floor hammock (also rotateX 180, applied after the
     /// turn around Y, which mirrors north and south) west 0, north 90, east 180, south 270.
+    /// Only the unit tests call it: they check this table against the game's rotation maths, and that it holds the
+    /// values written in silkhammock.json's shapeByType, which is what guards those values.
     /// </summary>
     public static int ModelRotateY(int opening, bool floor)
     {

@@ -21,9 +21,6 @@ namespace JumpingSpiders;
 /// </summary>
 public class SpiderJumpWorld : IJumpWorld, ISolidPointWorld
 {
-    /// <summary>How far below the feet (blocks) we probe to decide that there is something to stand on.</summary>
-    public const double FootingProbeDepth = 0.05;
-
     private readonly IBlockAccessor blockAccessor;
     private readonly Cuboidf collisionBox;
     private readonly int dimension;
@@ -105,7 +102,7 @@ public class SpiderJumpWorld : IJumpWorld, ISolidPointWorld
             return false;
         }
         // Footing: lowered a little, the box must hit something.
-        return !IsFree(feetX, standY - FootingProbeDepth, feetZ);
+        return !IsFree(feetX, standY - JumpPlanner.FootingProbeDepth, feetZ);
     }
 
     public bool IsSolidAt(double x, double y, double z)

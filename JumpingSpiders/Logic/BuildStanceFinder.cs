@@ -9,9 +9,9 @@ namespace JumpingSpiders;
 /// ceiling. AiTaskSpiderBuildHammock calls this once per build attempt (or once more after the spider has moved) and
 /// then tries to get to the nearest ones.
 ///
-/// It only looks at the cells around the site (Config.HammockBuildRange plus one in each direction, about 300 cells
-/// for a range of 2), and only through IJumpWorld, so the cost is a bounded number of block lookups and it runs on the
-/// small test worlds of the unit tests.
+/// It only looks at the cells around the site (Config.HammockBuildRange rounded up, plus one, in each direction:
+/// 5 x 5 x 5 = 125 cells for the default range of 0.5), and only through IJumpWorld, so the cost is a bounded number
+/// of block lookups and it runs on the small test worlds of the unit tests.
 ///
 /// Every spot must also have a clear line to the site (BuildReach.CanReach with the sight world): no reaching through
 /// a floor or a wall.

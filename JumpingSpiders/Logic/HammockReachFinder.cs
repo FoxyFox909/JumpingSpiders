@@ -64,19 +64,13 @@ public static class HammockReachFinder
     /// <summary>Up to count spots taken at random from spots (the list itself is not changed).</summary>
     public static List<StandSpot> PickSome(List<StandSpot> spots, int count, Random rand)
     {
-        List<StandSpot> copy = new List<StandSpot>(spots);
-        for (int i = copy.Count - 1; i > 0; i--)
+        int[] order = RandomOrder.Shuffled(spots.Count, rand);
+        List<StandSpot> some = new List<StandSpot>();
+        for (int i = 0; i < order.Length && some.Count < count; i++)
         {
-            int j = rand.Next(i + 1);
-            StandSpot temp = copy[i];
-            copy[i] = copy[j];
-            copy[j] = temp;
+            some.Add(spots[order[i]]);
         }
-        if (copy.Count > count)
-        {
-            copy.RemoveRange(count, copy.Count - count);
-        }
-        return copy;
+        return some;
     }
 
     /// <summary>
@@ -159,7 +153,7 @@ public static class HammockReachFinder
                     }
                     for (int y = start.CellY + 1; y <= start.CellY + up; y++)
                     {
-                        long key = CellKey(x, y, z);
+                        long key = JumpPlanner.CellKey(x, y, z);
                         if (found.Contains(key) || notStandable.Contains(key))
                         {
                             continue;
@@ -279,14 +273,5 @@ public static class HammockReachFinder
         double dx = ax - bx;
         double dz = az - bz;
         return dx * dx + dz * dz <= range * range;
-    }
-
-    // Packs a block cell into one number for the "seen" sets (21 bits per axis, as in JumpPlanner).
-    private static long CellKey(int x, int y, int z)
-    {
-        long kx = x & 0x1FFFFF;
-        long ky = y & 0x1FFFFF;
-        long kz = z & 0x1FFFFF;
-        return (kx << 42) | (ky << 21) | kz;
     }
 }

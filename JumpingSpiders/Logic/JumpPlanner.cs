@@ -28,6 +28,13 @@ public static class JumpPlanner
     /// </summary>
     public const double LastTickFootingMargin = 1.25;
 
+    /// <summary>
+    /// IsArcClear checks a move longer than this (blocks) within one physics tick at points part-way through it too,
+    /// at most this far apart. Well under the spider's smallest size (the baby's box is 0.3 tall and 0.4 wide), so a
+    /// thin plate such as a hammock's 1/16 floor cannot fall between two checked points.
+    /// </summary>
+    public const double MaxUncheckedMove = 0.25;
+
     /// <summary>Feet heights this close below a whole number still count as that block cell (rounding errors).</summary>
     public const double CellHeightEpsilon = 0.01;
 
@@ -42,6 +49,18 @@ public static class JumpPlanner
     /// </summary>
     public static List<JumpStep> PlanJumps(IJumpWorld world, double startX, double startY, double startZ,
         int goalX, int goalY, int goalZ, JumpLimits limits, Random rand)
+    {
+        return PlanJumps(world, startX, startY, startZ, goalX, goalY, goalZ, limits, rand, null);
+    }
+
+    /// <summary>
+    /// The same, for a caller that plans to the same goal from many starts in the same world (LaunchSpotFinder).
+    /// jumpsToGoal remembers, by cell (CellKey), the jump from a spot standing in the middle of that cell to the goal,
+    /// or null when there is none, so that the next search need not test it again. Start with an empty dictionary and
+    /// pass the same one for that goal only.
+    /// </summary>
+    public static List<JumpStep> PlanJumps(IJumpWorld world, double startX, double startY, double startZ,
+        int goalX, int goalY, int goalZ, JumpLimits limits, Random rand, Dictionary<long, JumpStep> jumpsToGoal)
     {
         int startCellX = CellOfX(startX);
         int startCellY = CellOfFeetY(startY);
@@ -66,6 +85,8 @@ public static class JumpPlanner
         start.FeetX = startX;
         start.FeetY = startY;
         start.FeetZ = startZ;
+        start.AtCellCentre = jumpsToGoal != null && startX == startCellX + 0.5 && startZ == startCellZ + 0.5
+            && startY == world.GetStandHeight(startCellX, startCellY, startCellZ);
 
         HashSet<long> visited = new HashSet<long>();
         visited.Add(CellKey(startCellX, startCellY, startCellZ));
@@ -77,11 +98,11 @@ public static class JumpPlanner
         for (int depth = 1; depth <= limits.MaxPlannedJumps; depth++)
         {
             // Can any spot reached so far jump straight to the goal?
-            Shuffle(frontier, rand);
-            for (int i = 0; i < frontier.Count; i++)
+            int[] order = RandomOrder.Shuffled(frontier.Count, rand);
+            for (int i = 0; i < order.Length; i++)
             {
-                JumpPlanNode node = frontier[i];
-                JumpStep last = TryJump(world, node.FeetX, node.FeetY, node.FeetZ, goalFeetX, goalFeetY, goalFeetZ, limits);
+                JumpPlanNode node = frontier[order[i]];
+                JumpStep last = JumpToGoal(world, node, goalFeetX, goalFeetY, goalFeetZ, limits, jumpsToGoal);
                 if (last != null)
                 {
                     return BuildPlan(node, last);
@@ -93,14 +114,27 @@ public static class JumpPlanner
                 break;
             }
 
-            // No: find the perches one more jump away. On the last level, a perch is only useful when the goal
-            // is within one jump of it, which is a cheap test that skips most cells.
-            bool mustReachGoalNext = depth + 1 == limits.MaxPlannedJumps;
+            // No: one more jump. On the last level a perch is only useful when it can jump to the goal, so each one is
+            // tested against the goal as soon as it is found, and the first that works is the plan.
+            if (depth + 1 == limits.MaxPlannedJumps)
+            {
+                for (int i = 0; i < order.Length; i++)
+                {
+                    List<JumpStep> plan = PlanThroughLastPerch(world, frontier[order[i]], limits, visited,
+                        goalFeetX, goalFeetY, goalFeetZ, rand, jumpsToGoal);
+                    if (plan != null)
+                    {
+                        return plan;
+                    }
+                }
+                break;
+            }
+
+            // Otherwise collect the perches one more jump away for the next level.
             List<JumpPlanNode> next = new List<JumpPlanNode>();
             for (int i = 0; i < frontier.Count; i++)
             {
-                AddReachablePerches(world, frontier[i], limits, visited, mustReachGoalNext,
-                    goalFeetX, goalFeetY, goalFeetZ, next);
+                AddReachablePerches(world, frontier[i], limits, visited, next);
             }
             if (next.Count == 0)
             {
@@ -155,13 +189,7 @@ public static class JumpPlanner
                     {
                         continue;
                     }
-                    JumpPlanNode node = new JumpPlanNode();
-                    node.CellX = x;
-                    node.CellY = y;
-                    node.CellZ = z;
-                    node.FeetX = feetX;
-                    node.FeetY = world.GetStandHeight(x, y, z);
-                    node.FeetZ = feetZ;
+                    JumpPlanNode node = NewNode(x, y, z, feetX, world.GetStandHeight(x, y, z), feetZ);
                     candidates.Add(node);
                     heights.Add(Math.Max(node.FeetY, startY));
                 }
@@ -169,9 +197,14 @@ public static class JumpPlanner
         }
 
         // Pick one, check its arc (the expensive part), and if blocked drop it and pick again.
+        List<double> weights = null;
+        if (candidates.Count > 0)
+        {
+            weights = HeightWeightedPicker.Weights(heights, heightBias);
+        }
         for (int attempt = 0; attempt < RandomSpotMaxAttempts && candidates.Count > 0; attempt++)
         {
-            int index = HeightWeightedPicker.PickIndex(heights, heightBias, rand);
+            int index = HeightWeightedPicker.PickIndexByWeight(weights, rand);
             JumpPlanNode chosen = candidates[index];
             JumpStep step = TryJump(world, startX, startY, startZ, chosen.FeetX, chosen.FeetY, chosen.FeetZ, limits);
             if (step != null)
@@ -181,17 +214,28 @@ public static class JumpPlanner
                 return plan;
             }
             candidates.RemoveAt(index);
-            heights.RemoveAt(index);
+            HeightWeightedPicker.RemoveAt(heights, weights, index, heightBias);
         }
         return null;
     }
 
     /// <summary>
-    /// One jump between two feet positions whose whole arc is free of blocks, or null. Tries the preferred launch
-    /// angle first and then steeper and flatter ones, so that a jump onto a ledge can use a higher arc.
+    /// One jump between two feet positions whose whole arc is free of blocks and that ends on something to stand on,
+    /// or null. Tries the preferred launch angle first and then steeper and flatter ones, so that a jump onto a ledge
+    /// can use a higher arc.
     /// </summary>
     public static JumpStep TryJump(IJumpWorld world, double fromX, double fromY, double fromZ,
         double toX, double toY, double toZ, JumpLimits limits)
+    {
+        return TryJump(world, fromX, fromY, fromZ, toX, toY, toZ, limits, true);
+    }
+
+    /// <summary>
+    /// The same, with needFooting false for a jump that ends in the air against a wall or ceiling (ClingJump): then
+    /// only the flight is checked, not what is under the landing point.
+    /// </summary>
+    public static JumpStep TryJump(IJumpWorld world, double fromX, double fromY, double fromZ,
+        double toX, double toY, double toZ, JumpLimits limits, bool needFooting)
     {
         double dx = toX - fromX;
         double dy = toY - fromY;
@@ -210,7 +254,7 @@ public static class JumpPlanner
             step.ToX = toX;
             step.ToY = toY;
             step.ToZ = toZ;
-            if (IsArcClear(world, step))
+            if (IsArcClear(world, step, needFooting))
             {
                 return step;
             }
@@ -218,18 +262,27 @@ public static class JumpPlanner
         return null;
     }
 
-    /// <summary>
-    /// True when the spider's box touches no block anywhere along the jump, and there is something to land on.
-    /// Mirrors the engine: each physics tick first moves the spider vertically (checked at the old horizontal
-    /// position), then horizontally (checked at the new one).
-    /// </summary>
+    /// <summary>True when the spider's box touches no block anywhere along the jump, and there is something to land on.</summary>
     public static bool IsArcClear(IJumpWorld world, JumpStep step)
+    {
+        return IsArcClear(world, step, true);
+    }
+
+    /// <summary>
+    /// True when the spider's box touches no block anywhere along the jump, and (with needFooting) there is something
+    /// to land on. Mirrors the engine: each physics tick first moves the spider vertically (checked at the old
+    /// horizontal position), then horizontally (checked at the new one). A move longer than MaxUncheckedMove is also
+    /// checked at points part-way through it: the engine sweeps the box along the whole move, and a steep launch rises
+    /// more in one tick than the spider is tall, so checking only the ends would let it pass through a thin plate.
+    /// </summary>
+    public static bool IsArcClear(IJumpWorld world, JumpStep step, bool needFooting)
     {
         double stepX = step.VX * JumpMath.PhysicsTickSeconds;
         double stepZ = step.VZ * JumpMath.PhysicsTickSeconds;
         double motionY = step.VY / JumpMath.BlocksPerSecondPerMotionUnit;
         double relativeY = 0;
         double previousX = step.FromX;
+        double previousY = step.FromY;
         double previousZ = step.FromZ;
 
         for (int tick = 1; tick <= step.FlightTicks; tick++)
@@ -247,16 +300,34 @@ public static class JumpPlanner
                 z = step.ToZ;
             }
 
-            if (!world.IsFree(previousX, y, previousZ))
+            // The vertical move, at the old horizontal position.
+            int parts = PartsOfMove(y - previousY);
+            for (int part = 1; part <= parts; part++)
             {
-                return false;
+                if (!world.IsFree(previousX, previousY + (y - previousY) * part / parts, previousZ))
+                {
+                    return false;
+                }
             }
-            if (!world.IsFree(x, y, z))
+            // Then the horizontal move, at the new height.
+            double moveX = x - previousX;
+            double moveZ = z - previousZ;
+            parts = PartsOfMove(Math.Sqrt(moveX * moveX + moveZ * moveZ));
+            for (int part = 1; part <= parts; part++)
             {
-                return false;
+                if (!world.IsFree(previousX + moveX * part / parts, y, previousZ + moveZ * part / parts))
+                {
+                    return false;
+                }
             }
             previousX = x;
+            previousY = y;
             previousZ = z;
+        }
+
+        if (!needFooting)
+        {
+            return true;
         }
 
         // Something to land on, a little behind the landing point (see LastTickFootingMargin).
@@ -286,7 +357,7 @@ public static class JumpPlanner
     }
 
     private static void AddReachablePerches(IJumpWorld world, JumpPlanNode from, JumpLimits limits, HashSet<long> visited,
-        bool mustReachGoalNext, double goalFeetX, double goalFeetY, double goalFeetZ, List<JumpPlanNode> result)
+        List<JumpPlanNode> result)
     {
         int reach = (int)Math.Ceiling(limits.MaxJumpHorizontal);
         int up = (int)Math.Ceiling(limits.MaxJumpUp);
@@ -300,10 +371,6 @@ public static class JumpPlanner
                     double feetX = x + 0.5;
                     double feetZ = z + 0.5;
                     if (!WithinLimitsRoughly(from.FeetX, from.FeetY, from.FeetZ, feetX, y, feetZ, limits))
-                    {
-                        continue;
-                    }
-                    if (mustReachGoalNext && !WithinLimitsRoughly(feetX, y, feetZ, goalFeetX, goalFeetY, goalFeetZ, limits))
                     {
                         continue;
                     }
@@ -323,20 +390,106 @@ public static class JumpPlanner
                         continue;
                     }
                     visited.Add(key);
-                    JumpPlanNode node = new JumpPlanNode();
-                    node.CellX = x;
-                    node.CellY = y;
-                    node.CellZ = z;
-                    node.FeetX = feetX;
-                    node.FeetY = feetY;
-                    node.FeetZ = feetZ;
+                    JumpPlanNode node = NewNode(x, y, z, feetX, feetY, feetZ);
                     node.Parent = from;
                     node.StepFromParent = step;
-                    node.Depth = from.Depth + 1;
                     result.Add(node);
                 }
             }
         }
+    }
+
+    // The last level of a search: the cells one jump from "from" that are roughly within one jump of the goal, in
+    // random order (so that among equally short plans each perch is as likely). Returns the plan through the first
+    // one that the spider can jump to and from which it can jump to the goal, or null.
+    private static List<JumpStep> PlanThroughLastPerch(IJumpWorld world, JumpPlanNode from, JumpLimits limits,
+        HashSet<long> visited, double goalFeetX, double goalFeetY, double goalFeetZ, Random rand,
+        Dictionary<long, JumpStep> jumpsToGoal)
+    {
+        List<JumpPlanNode> cells = new List<JumpPlanNode>();
+        int reach = (int)Math.Ceiling(limits.MaxJumpHorizontal);
+        int up = (int)Math.Ceiling(limits.MaxJumpUp);
+        int down = (int)Math.Ceiling(limits.MaxJumpDown);
+        for (int x = from.CellX - reach; x <= from.CellX + reach; x++)
+        {
+            for (int z = from.CellZ - reach; z <= from.CellZ + reach; z++)
+            {
+                for (int y = from.CellY - down; y <= from.CellY + up; y++)
+                {
+                    double feetX = x + 0.5;
+                    double feetZ = z + 0.5;
+                    if (!WithinLimitsRoughly(from.FeetX, from.FeetY, from.FeetZ, feetX, y, feetZ, limits))
+                    {
+                        continue;
+                    }
+                    if (!WithinLimitsRoughly(feetX, y, feetZ, goalFeetX, goalFeetY, goalFeetZ, limits))
+                    {
+                        continue;
+                    }
+                    if (visited.Contains(CellKey(x, y, z)) || !world.CanStandAt(x, y, z))
+                    {
+                        continue;
+                    }
+                    cells.Add(NewNode(x, y, z, feetX, world.GetStandHeight(x, y, z), feetZ));
+                }
+            }
+        }
+
+        int[] order = RandomOrder.Shuffled(cells.Count, rand);
+        for (int i = 0; i < order.Length; i++)
+        {
+            JumpPlanNode node = cells[order[i]];
+            JumpStep step = TryJump(world, from.FeetX, from.FeetY, from.FeetZ, node.FeetX, node.FeetY, node.FeetZ, limits);
+            if (step == null)
+            {
+                continue;
+            }
+            // Reachable: another spot of this level need not try it again (its jump to the goal is the same).
+            visited.Add(CellKey(node.CellX, node.CellY, node.CellZ));
+            JumpStep last = JumpToGoal(world, node, goalFeetX, goalFeetY, goalFeetZ, limits, jumpsToGoal);
+            if (last == null)
+            {
+                continue;
+            }
+            node.Parent = from;
+            node.StepFromParent = step;
+            return BuildPlan(node, last);
+        }
+        return null;
+    }
+
+    // TryJump from the node to the goal, looked up in (and added to) jumpsToGoal when there is one and the node stands
+    // in the middle of its cell, as every spot but a start does.
+    private static JumpStep JumpToGoal(IJumpWorld world, JumpPlanNode node, double goalFeetX, double goalFeetY, double goalFeetZ,
+        JumpLimits limits, Dictionary<long, JumpStep> jumpsToGoal)
+    {
+        if (jumpsToGoal == null || !node.AtCellCentre)
+        {
+            return TryJump(world, node.FeetX, node.FeetY, node.FeetZ, goalFeetX, goalFeetY, goalFeetZ, limits);
+        }
+        long key = CellKey(node.CellX, node.CellY, node.CellZ);
+        JumpStep known;
+        if (jumpsToGoal.TryGetValue(key, out known))
+        {
+            return known;
+        }
+        JumpStep step = TryJump(world, node.FeetX, node.FeetY, node.FeetZ, goalFeetX, goalFeetY, goalFeetZ, limits);
+        jumpsToGoal[key] = step;
+        return step;
+    }
+
+    // A spot standing in the middle of its cell (feet at the cell's stand height).
+    private static JumpPlanNode NewNode(int x, int y, int z, double feetX, double feetY, double feetZ)
+    {
+        JumpPlanNode node = new JumpPlanNode();
+        node.AtCellCentre = true;
+        node.CellX = x;
+        node.CellY = y;
+        node.CellZ = z;
+        node.FeetX = feetX;
+        node.FeetY = feetY;
+        node.FeetZ = feetZ;
+        return node;
     }
 
     // A quick test against the distance limits only, before any expensive check. toCellY is the cell's floor
@@ -361,6 +514,12 @@ public static class JumpPlanner
         return true;
     }
 
+    // How many equal parts a move of this length (blocks, either sign) is checked in: 1 up to MaxUncheckedMove.
+    private static int PartsOfMove(double length)
+    {
+        return Math.Max(1, (int)Math.Ceiling(Math.Abs(length) / MaxUncheckedMove));
+    }
+
     private static List<JumpStep> BuildPlan(JumpPlanNode lastNode, JumpStep lastStep)
     {
         List<JumpStep> plan = new List<JumpStep>();
@@ -374,18 +533,8 @@ public static class JumpPlanner
         return plan;
     }
 
-    private static void Shuffle(List<JumpPlanNode> list, Random rand)
-    {
-        for (int i = list.Count - 1; i > 0; i--)
-        {
-            int j = rand.Next(i + 1);
-            JumpPlanNode temp = list[i];
-            list[i] = list[j];
-            list[j] = temp;
-        }
-    }
-
-    private static double Distance(double ax, double ay, double az, double bx, double by, double bz)
+    /// <summary>Straight-line distance between two points, in blocks.</summary>
+    public static double Distance(double ax, double ay, double az, double bx, double by, double bz)
     {
         double dx = ax - bx;
         double dy = ay - by;
@@ -393,9 +542,11 @@ public static class JumpPlanner
         return Math.Sqrt(dx * dx + dy * dy + dz * dz);
     }
 
-    // Packs a block cell into one number for the visited set. 21 bits per axis is plenty for the few blocks
-    // around one spider; the masks just keep negative numbers from spilling into the other axes.
-    private static long CellKey(int x, int y, int z)
+    /// <summary>
+    /// Packs a block cell into one number, for sets of cells already seen. 21 bits per axis is plenty for the few
+    /// blocks around one spider; the masks just keep negative numbers from spilling into the other axes.
+    /// </summary>
+    public static long CellKey(int x, int y, int z)
     {
         long kx = x & 0x1FFFFF;
         long ky = y & 0x1FFFFF;

@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using Vintagestory.API.Common;
 using Vintagestory.API.Datastructures;
@@ -81,14 +80,9 @@ public class AiTaskSpiderExplore : AiTaskBase
         pauseMaxMs = taskConfig["pauseMaxMs"].AsInt(3000);
 
         runner = new JumpRunner(entity);
-        // Milliseconds: the short crouch before each hop, a random time between these two (0 and 0 = none).
-        runner.WindUpMinSeconds = taskConfig["windUpMinMs"].AsInt(350) / 1000f;
-        runner.WindUpMaxSeconds = taskConfig["windUpMaxMs"].AsInt(900) / 1000f;
-        // Degrees per second: how fast it turns towards the hop direction during the crouch.
-        runner.TurnSpeedRadPerSec = taskConfig["turnSpeedDegPerSec"].AsFloat(360) * (float)Math.PI / 180f;
-        // Animation codes from the entity JSON; "" = none.
-        runner.WindUpAnimation = SpiderTaskUtil.ReadAnimation(taskConfig, "windUpAnimation", "jumpwindup");
-        runner.JumpAnimation = SpiderTaskUtil.ReadAnimation(taskConfig, "jumpAnimation", "jump");
+        // windUpMinMs, windUpMaxMs, turnSpeedDegPerSec, windUpAnimation, jumpAnimation (see JumpRunner.ReadSettings).
+        // pauseBetweenJumpsMs is read too but never matters: every hop is a plan of one jump.
+        runner.ReadSettings(taskConfig);
     }
 
     /// <summary>Nothing may interrupt the spider while it is in the air.</summary>
@@ -144,7 +138,10 @@ public class AiTaskSpiderExplore : AiTaskBase
         base.StartExecute();
         hopsDone = 0;
         pausing = false;
-        SpiderTaskUtil.Log(entity, LogName, "starts an outing (curiosity " + outingCuriosity.ToString("0.00") + ")");
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "starts an outing (curiosity " + outingCuriosity.ToString("0.00") + ")");
+        }
         StartHop(pendingPlan);
         pendingPlan = null;
     }
@@ -164,8 +161,11 @@ public class AiTaskSpiderExplore : AiTaskBase
         {
             // A hop just ended.
             hopping = false;
-            SpiderTaskUtil.Log(entity, LogName, "hop " + (hopsDone + 1) + " over (" + runner.State + ", " + runner.LastEndReason
-                + ") at " + SpiderTaskUtil.Format(entity.Pos.X, entity.Pos.Y, entity.Pos.Z));
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "hop " + (hopsDone + 1) + " over (" + runner.State + ", " + runner.LastEndReason
+                    + ") at " + SpiderTaskUtil.Format(entity.Pos.X, entity.Pos.Y, entity.Pos.Z));
+            }
             if (runner.State != JumpRunState.Reached)
             {
                 return false;
@@ -215,8 +215,11 @@ public class AiTaskSpiderExplore : AiTaskBase
     private void StartHop(List<JumpStep> plan)
     {
         JumpStep step = plan[0];
-        SpiderTaskUtil.Log(entity, LogName, "hop " + (hopsDone + 1) + " to " + SpiderTaskUtil.Format(step.ToX, step.ToY, step.ToZ)
-            + " (" + (step.ToY - step.FromY).ToString("+0.00;-0.00") + " blocks)");
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "hop " + (hopsDone + 1) + " to " + SpiderTaskUtil.Format(step.ToX, step.ToY, step.ToZ)
+                + " (" + (step.ToY - step.FromY).ToString("+0.00;-0.00") + " blocks)");
+        }
         runner.Start(plan);
         hopping = true;
     }
@@ -248,7 +251,10 @@ public class AiTaskSpiderExplore : AiTaskBase
             hasAnchor = true;
             anchorX = entity.Pos.X;
             anchorZ = entity.Pos.Z;
-            SpiderTaskUtil.Log(entity, LogName, "territory centred at " + SpiderTaskUtil.Format(anchorX, entity.Pos.Y, anchorZ));
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "territory centred at " + SpiderTaskUtil.Format(anchorX, entity.Pos.Y, anchorZ));
+            }
         }
     }
 }

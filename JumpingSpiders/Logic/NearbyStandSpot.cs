@@ -23,11 +23,11 @@ public static class NearbyStandSpot
         int maxHeightDifference, Random rand)
     {
         List<StandSpot> columns = ColumnsInRing(x, z, minDistance, maxDistance);
-        Shuffle(columns, rand);
+        int[] order = RandomOrder.Shuffled(columns.Count, rand);
         int baseY = (int)Math.Floor(feetY);
-        for (int i = 0; i < columns.Count; i++)
+        for (int i = 0; i < order.Length; i++)
         {
-            StandSpot column = columns[i];
+            StandSpot column = columns[order[i]];
             for (int step = 0; step <= 2 * maxHeightDifference; step++)
             {
                 int y = baseY + HeightOffset(step);
@@ -81,16 +81,5 @@ public static class NearbyStandSpot
             }
         }
         return columns;
-    }
-
-    private static void Shuffle(List<StandSpot> list, Random rand)
-    {
-        for (int i = list.Count - 1; i > 0; i--)
-        {
-            int j = rand.Next(i + 1);
-            StandSpot temp = list[i];
-            list[i] = list[j];
-            list[j] = temp;
-        }
     }
 }

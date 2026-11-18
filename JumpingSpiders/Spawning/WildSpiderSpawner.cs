@@ -147,6 +147,10 @@ public static class WildSpiderSpawner
         if (request.Rand.NextDouble() < request.HammockChance)
         {
             hammock = WildHammockSites.FindOrPlace(world, mapChunk, record, request, spiderBox, result);
+            if (result.Outcome == SpawnOutcome.ChunkNotLoaded)
+            {
+                return result;
+            }
         }
         else
         {
@@ -270,7 +274,6 @@ public static class WildSpiderSpawner
 
         result.Outcome = SpawnOutcome.Spawned;
         result.Spider = spider;
-        result.Hammock = hammock;
         string where = "on the ground";
         if (result.InHammock)
         {
@@ -279,6 +282,32 @@ public static class WildSpiderSpawner
         result.Note(string.Format("Spawned a wild {0} (id {1}) {2} at {3:0.0}, {4:0.0}, {5:0.0}.",
             sex, spider.EntityId, where, spawnAt.X, spawnAt.Y, spawnAt.Z));
         return result;
+    }
+
+    /// <summary>
+    /// The cheapest natural rules on their own: a spider chunk, its map chunk loaded, its cooldown over and room under its
+    /// cap of wild spiders (a record read and one entity query). SpiderSpawnSystem asks this before an attempt, so
+    /// chunks that would be refused at once do not use up the attempts of a check. TrySpawn checks them all again.
+    /// </summary>
+    public static bool PassesQuickRules(ICoreServerAPI api, int chunkX, int chunkZ)
+    {
+        JumpingSpidersConfig config = JumpingSpidersModSystem.Config;
+        if (!SpiderChunks.IsSpiderChunk(api.World.Seed, chunkX, chunkZ, config.SpiderChunkFraction))
+        {
+            return false;
+        }
+        IMapChunk mapChunk = api.WorldManager.GetMapChunk(chunkX, chunkZ);
+        if (mapChunk == null)
+        {
+            return false;
+        }
+        WildHammockRecord record = WildHammockRecords.Load(mapChunk);
+        if (!SpawnRules.IsCooldownOver(record.LastSpawnTotalHours, api.World.Calendar.TotalHours, config.SpiderChunkSpawnCooldownHours))
+        {
+            return false;
+        }
+        WildSpiderCensus census = WildSpiderCensus.Take(api.World, chunkX, chunkZ);
+        return SpawnRules.HasRoomForWildSpider(census.WildSpiders, config.MaxWildSpidersPerSpiderChunk);
     }
 
     // A natural rule says no. Normally that ends the attempt: the result fails with this outcome and sentence, and

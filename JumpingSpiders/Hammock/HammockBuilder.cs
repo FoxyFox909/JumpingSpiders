@@ -95,7 +95,7 @@ public static class HammockBuilder
     /// a ceiling or floor hammock opens towards a random side whose neighbouring cell is free, or any side when none
     /// is (BlockSilkHammock.ChooseVariantAtRandom). Returns false, and changes nothing, when the cell is not free, that
     /// neighbour cannot hold a hammock, or an entity is in the way.
-    /// Does not check the spacing rule; call HammockFinder.HasHammockWithinSpacing first if it matters.
+    /// Does not check the spacing rule; call HammockFinder.FindHammockWithinSpacing first if it matters.
     /// </summary>
     public static bool PlaceHammock(IWorldAccessor world, BlockPos pos, BlockFacing supportFacing)
     {
@@ -106,23 +106,9 @@ public static class HammockBuilder
         return PlaceVariant(world, pos, BlockSilkHammock.ChooseVariantAtRandom(world, pos, supportFacing));
     }
 
-    /// <summary>The same with a chosen opening for a ceiling or floor hammock (ignored for wall hammocks).</summary>
-    public static bool PlaceHammock(IWorldAccessor world, BlockPos pos, BlockFacing supportFacing, BlockFacing opening)
-    {
-        if (world == null || pos == null || supportFacing == null)
-        {
-            return false;
-        }
-        return PlaceVariant(world, pos, BlockSilkHammock.GetVariant(world, supportFacing, opening));
-    }
-
     // Places this exact variant (see PlaceHammock).
     private static bool PlaceVariant(IWorldAccessor world, BlockPos pos, BlockSilkHammock variant)
     {
-        if (pos == null)
-        {
-            return false;
-        }
         if (variant == null)
         {
             return false;
@@ -196,8 +182,8 @@ public static class HammockBuilder
         return current.IsReplacableBy(hammock);
     }
 
-    // True when the block at pos has something a creature collides with (a full block, a slab, a fence...).
-    private static bool HasCollisionBoxes(IBlockAccessor blockAccessor, BlockPos pos)
+    /// <summary>True when the block at pos has something a creature collides with (a full block, a slab, a fence...).</summary>
+    public static bool HasCollisionBoxes(IBlockAccessor blockAccessor, BlockPos pos)
     {
         Block block = blockAccessor.GetBlock(pos);
         if (block == null || block.Id == 0)

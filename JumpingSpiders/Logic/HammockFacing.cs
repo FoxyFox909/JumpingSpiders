@@ -17,26 +17,12 @@ namespace JumpingSpiders;
 /// </summary>
 public static class HammockFacing
 {
-    /// <summary>X part of the direction silkhammock-up and silkhammock-down open towards: -X, west.</summary>
-    public const int VerticalOpeningX = -1;
-
-    /// <summary>Z part of the direction silkhammock-up and silkhammock-down open towards.</summary>
-    public const int VerticalOpeningZ = 0;
-
     /// <summary>
     /// The yaw, in [0, 2 pi), of a spider sleeping in a hammock whose support (the block holding it) is in direction
     /// (supportX, supportY, supportZ) from the hammock: one of the six unit directions, e.g. (0, 0, -1) for a hammock
-    /// on a wall to its north, (0, 1, 0) for one under a ceiling. Ceiling and floor hammocks are taken to open west,
-    /// like silkhammock-up and silkhammock-down; use the overload with the opening for the others.
-    /// </summary>
-    public static double SleepYaw(int supportX, int supportY, int supportZ)
-    {
-        return SleepYaw(supportX, supportY, supportZ, VerticalOpeningX, VerticalOpeningZ);
-    }
-
-    /// <summary>
-    /// The same for a hammock that opens towards (openingX, openingZ): a wall hammock still looks away from its wall
-    /// (the opening is ignored), a ceiling or floor hammock looks out along its opening.
+    /// on a wall to its north, (0, 1, 0) for one under a ceiling. A wall hammock looks away from its wall (the opening
+    /// is ignored); a ceiling or floor hammock looks out along its opening (openingX, openingZ), and west, where
+    /// silkhammock-up and silkhammock-down open (HammockOpening.DefaultOpening), when that is (0, 0).
     /// </summary>
     public static double SleepYaw(int supportX, int supportY, int supportZ, int openingX, int openingZ)
     {
@@ -50,8 +36,8 @@ public static class HammockFacing
         }
         if (lookX == 0 && lookZ == 0)
         {
-            lookX = VerticalOpeningX;
-            lookZ = VerticalOpeningZ;
+            lookX = HammockOpening.DirX[HammockOpening.DefaultOpening];
+            lookZ = HammockOpening.DirZ[HammockOpening.DefaultOpening];
         }
         double yaw = Math.Atan2(lookX, lookZ);
         if (yaw < 0)

@@ -164,10 +164,13 @@
 				// Keep this list sorted by descending priority. Every AI tick the game walks it in this order and starts
 				// the first task that wants to run; a later task can take over from a running one only when its priority is
 				// strictly higher than the running task's priorityForCancel.
-				// The jumpingspiders.* tasks are explained in their C# files (AiTasks folder). Every key they read is
-				// written out below with the code's default, so all of them can be tuned here. Times are in milliseconds
-				// (ms), distances in blocks. Animation codes refer to "animations" above; "" = none. The physical jump
-				// ability (how high and far a jump goes) is in ModConfig/jumpingspiders.json instead.
+				// The jumpingspiders.* tasks are explained in their C# files (AiTasks folder). Every key that matters
+				// for them is written out below, so all of them can be tuned here. A task listed once has the code's
+				// defaults. The two listed twice differ between their entries: the code's defaults are the values of the
+				// hunting jumpattack and of the jumpflee from players, except that switches such as onlyWhenHungry are
+				// off by default. Times are in milliseconds (ms), distances in blocks. Animation codes refer to
+				// "animations" above; "" = none. The physical jump ability (how high and far a jump goes) is in
+				// ModConfig/jumpingspiders.json instead.
 				aitasks: [
 					{
 						// Attack a player while angry ("aggressiveondamage": a wild spider that was hit, or whose hammock
@@ -179,7 +182,6 @@
 						// Only whoever caused the anger (the player who hit it or broke its hammock), never a bystander.
 						targetEmotionSource: true,
 						onlyWhenHungry: false,
-						tamingGenerations: 1000,
 						seekingRange: 10,
 						loseTargetRange: 20,
 						pounceRange: 5,
@@ -307,7 +309,6 @@
 						onlyWhenHungry: true,
 						sameSexRivalsOnly: true,
 						retaliateAttacks: false,
-						tamingGenerations: 1000,
 						seekingRange: 10,
 						loseTargetRange: 16,
 						pounceRange: 5,

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
 using Vintagestory.API.MathTools;
-using Vintagestory.GameContent;
 
 namespace JumpingSpiders;
 
@@ -35,16 +34,13 @@ namespace JumpingSpiders;
 /// is handed back to the game's physics with the vertical speed an unhurried jump would have there, so it drops down
 /// just as it did before the flight was sped up. The AI tick then reports the end (EndReason).
 ///
-/// A flight always ends, with EndReason saying why: landing, hitting a wall or ceiling, water, death, never
-/// leaving the ground (Config.JumpLiftoffTimeoutSeconds) or the timeout (Config.MaxFlightSeconds, sped up likewise).
+/// A flight always ends, with EndReason saying why: landing, hitting a wall or ceiling, water, never leaving the
+/// ground (Config.JumpLiftoffTimeoutSeconds), the timeout (Config.MaxFlightSeconds, sped up likewise) or Cancel.
 /// </summary>
 public class JumpController
 {
     /// <summary>True from Launch until the flight ends.</summary>
     public bool InFlight;
-
-    /// <summary>True during the one OnTick call in which the spider touched down (EndReason is then Landed).</summary>
-    public bool LandedThisTick;
 
     /// <summary>Why the last flight ended; None while flying or before the first jump.</summary>
     public JumpEndReason EndReason = JumpEndReason.None;
@@ -99,7 +95,6 @@ public class JumpController
         holdBlocksPerTick = config.MaxJumpSpeed * CurrentSchedule.SpeedMultiplier * JumpMath.PhysicsTickSeconds;
 
         InFlight = true;
-        LandedThisTick = false;
         EndReason = JumpEndReason.None;
         physicsEndReason = JumpEndReason.None;
         leftGround = false;
@@ -109,7 +104,7 @@ public class JumpController
         FlightPath.Clear();
         FlightPath.Add(new Vec3d(entity.Pos.X, entity.Pos.Y, entity.Pos.Z));
 
-        StopWalking();
+        SpiderTaskUtil.StopWalking(entity);
 
         // Face the jump direction. Yaw 0 looks towards +Z; Atan2(x, z) is the game's convention (see AiTaskSeekEntity).
         float yaw = (float)Math.Atan2(step.VX, step.VZ);
@@ -124,17 +119,12 @@ public class JumpController
     /// <summary>Call every AI tick while InFlight. dt is the AI tick length in seconds (not needed: physics keeps the time).</summary>
     public void OnTick(float dt)
     {
-        LandedThisTick = false;
         if (!InFlight)
         {
             return;
         }
 
-        if (!entity.Alive)
-        {
-            End(JumpEndReason.Died);
-            return;
-        }
+        // No check for death: the game stops running a dead entity's AI, so this is never called for one.
         if (entity.ShouldDespawn)
         {
             End(JumpEndReason.Cancelled);
@@ -143,10 +133,6 @@ public class JumpController
         if (physicsEndReason != JumpEndReason.None)
         {
             End(physicsEndReason);
-            if (EndReason == JumpEndReason.Landed)
-            {
-                LandedThisTick = true;
-            }
             return;
         }
         if (entity.FeetInLiquid || entity.Swimming)
@@ -168,17 +154,19 @@ public class JumpController
             return;
         }
 
-        StopWalking();
+        SpiderTaskUtil.StopWalking(entity);
     }
 
-    /// <summary>Ends the flight now; the spider falls on from here the way an unhurried jump would.</summary>
+    /// <summary>
+    /// Ends the flight now; the spider falls on from here the way an unhurried jump would (or stays where it is if it
+    /// never left the ground).
+    /// </summary>
     public void Cancel()
     {
         if (InFlight)
         {
             End(JumpEndReason.Cancelled);
         }
-        LandedThisTick = false;
     }
 
     private void End(JumpEndReason reason)
@@ -189,7 +177,16 @@ public class JumpController
             Unhook();
             if (ticksDone < CurrentSchedule.Ticks)
             {
-                HandBackToGamePhysics(true);
+                if (leftGround)
+                {
+                    HandBackToGamePhysics(true);
+                }
+                else
+                {
+                    // Never in the air (NoLiftoff, or cancelled before liftoff): the launch motion written for the
+                    // next tick would shove it along the ground, so it simply stops.
+                    entity.Pos.Motion.Set(0, 0, 0);
+                }
             }
         }
         InFlight = false;
@@ -330,16 +327,5 @@ public class JumpController
     {
         entity.Pos.Motion.X = 0;
         entity.Pos.Motion.Z = 0;
-    }
-
-    // Stops the AI's path following so it does not steer the spider in the air.
-    private void StopWalking()
-    {
-        EntityBehaviorTaskAI taskAi = entity.GetBehavior<EntityBehaviorTaskAI>();
-        if (taskAi != null && taskAi.PathTraverser != null && taskAi.PathTraverser.Active)
-        {
-            taskAi.PathTraverser.Stop();
-        }
-        entity.Controls.WalkVector.Set(0, 0, 0);
     }
 }

@@ -13,7 +13,7 @@ namespace JumpingSpiders;
 ///   CeilingLedgeClearance below the spot with that ledge clearance, so the arc's highest point is the spot itself
 ///   (JumpMath makes an upward arc peak at least the ledge clearance above its end). The task catches the spider at the
 ///   top of the arc.
-/// Every arc is checked against the blocks like a normal jump (IsFlightClear), only without the footing test at the end.
+/// Every arc is checked against the blocks like a normal jump (JumpPlanner.TryJump), only without the footing test at the end.
 /// </summary>
 public static class ClingJump
 {
@@ -25,7 +25,7 @@ public static class ClingJump
 
     /// <summary>
     /// A jump from the feet position (fromX, fromY, fromZ) to the clinging stance whose whole flight is free of blocks,
-    /// or null. Tries the launch angles in JumpMath's order (preferred first), like JumpPlanner.TryJump.
+    /// or null. JumpPlanner.TryJump without the footing test, so the launch angles are tried in the same order.
     /// </summary>
     public static JumpStep TryJump(IJumpWorld world, double fromX, double fromY, double fromZ, BuildStance stance, JumpLimits limits)
     {
@@ -37,71 +37,11 @@ public static class ClingJump
         double aimY = stance.FeetY;
         if (stance.IsCeiling())
         {
-            used = CopyWithLedgeClearance(limits, CeilingLedgeClearance);
+            used = limits.Copy();
+            used.LedgeClearance = CeilingLedgeClearance;
             aimY = stance.FeetY - CeilingLedgeClearance;
         }
-        double dx = stance.FeetX - fromX;
-        double dy = aimY - fromY;
-        double dz = stance.FeetZ - fromZ;
-        int count = JumpMath.AngleCandidateCount(used);
-        for (int i = 0; i < count; i++)
-        {
-            JumpStep step = new JumpStep();
-            if (!JumpMath.SolveLaunchAtAngle(dx, dy, dz, JumpMath.AngleCandidate(used, i), used, step))
-            {
-                continue;
-            }
-            step.FromX = fromX;
-            step.FromY = fromY;
-            step.FromZ = fromZ;
-            step.ToX = stance.FeetX;
-            step.ToY = aimY;
-            step.ToZ = stance.FeetZ;
-            if (IsFlightClear(world, step))
-            {
-                return step;
-            }
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// True when the spider's box touches no block anywhere along the jump. The same test as JumpPlanner.IsArcClear
-    /// (vertical move first, then horizontal, every physics tick), without asking for footing at the end.
-    /// </summary>
-    public static bool IsFlightClear(IJumpWorld world, JumpStep step)
-    {
-        double stepX = step.VX * JumpMath.PhysicsTickSeconds;
-        double stepZ = step.VZ * JumpMath.PhysicsTickSeconds;
-        double motionY = step.VY / JumpMath.BlocksPerSecondPerMotionUnit;
-        double relativeY = 0;
-        double previousX = step.FromX;
-        double previousZ = step.FromZ;
-        for (int tick = 1; tick <= step.FlightTicks; tick++)
-        {
-            motionY = JumpMath.StepVerticalMotion(motionY);
-            relativeY = relativeY + motionY * JumpMath.PositionPerMotionPerTick;
-            double y = step.FromY + relativeY;
-            double x = step.FromX + stepX * tick;
-            double z = step.FromZ + stepZ * tick;
-            if (tick == step.FlightTicks)
-            {
-                x = step.ToX;
-                y = step.ToY;
-                z = step.ToZ;
-            }
-            if (!world.IsFree(previousX, y, previousZ))
-            {
-                return false;
-            }
-            if (!world.IsFree(x, y, z))
-            {
-                return false;
-            }
-            previousX = x;
-            previousZ = z;
-        }
-        return true;
+        return JumpPlanner.TryJump(world, fromX, fromY, fromZ, stance.FeetX, aimY, stance.FeetZ, used, false);
     }
 
     /// <summary>
@@ -143,22 +83,5 @@ public static class ClingJump
         holdY = y + dirY * move;
         holdZ = z + dirZ * move;
         return true;
-    }
-
-    // The same limits with another ledge clearance.
-    private static JumpLimits CopyWithLedgeClearance(JumpLimits limits, double ledgeClearance)
-    {
-        JumpLimits copy = new JumpLimits();
-        copy.JumpAngleDeg = limits.JumpAngleDeg;
-        copy.MinJumpAngleDeg = limits.MinJumpAngleDeg;
-        copy.MaxJumpAngleDeg = limits.MaxJumpAngleDeg;
-        copy.MaxJumpSpeed = limits.MaxJumpSpeed;
-        copy.MaxJumpUp = limits.MaxJumpUp;
-        copy.MaxJumpDown = limits.MaxJumpDown;
-        copy.MaxJumpHorizontal = limits.MaxJumpHorizontal;
-        copy.LedgeClearance = ledgeClearance;
-        copy.MaxPlannedJumps = limits.MaxPlannedJumps;
-        copy.MaxFlightSeconds = limits.MaxFlightSeconds;
-        return copy;
     }
 }

@@ -11,8 +11,7 @@ namespace JumpingSpiders;
 /// - "jumpingspiders.spider" is EntityBehaviorJumpingSpider (kills, meals, despawn protection, info text).
 /// - "jumpingspiders.grow" is EntityBehaviorSpiderGrow (vanilla growing that keeps our saved state).
 /// - On the server, the game's global death event (fired for every creature that dies) tells the killing spider
-///   about its kill. That covers any way a spider can kill, so the AI tasks need not report kills themselves
-///   (if they do, the spider ignores the second report).
+///   about its kill. That covers any way a spider can kill, so the AI tasks do not report kills themselves.
 /// </summary>
 public static class SpiderRegistration
 {

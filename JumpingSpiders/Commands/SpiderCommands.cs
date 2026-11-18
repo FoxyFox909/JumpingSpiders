@@ -247,7 +247,7 @@ public static class SpiderCommands
                 return looked;
             }
         }
-        return sapi.World.GetNearestEntity(CallerPosition(args), TargetSearchRange, TargetSearchRange, IsLivingSpider);
+        return sapi.World.GetNearestEntity(CallerPosition(args), TargetSearchRange, TargetSearchRange, SpiderAttributes.IsLivingSpider);
     }
 
     /// <summary>The spider's build task (from its entity JSON), or null when it has none (babies).</summary>
@@ -268,11 +268,6 @@ public static class SpiderCommands
             }
         }
         return null;
-    }
-
-    private static bool IsLivingSpider(Entity entity)
-    {
-        return entity.Alive && SpiderAttributes.IsSpider(entity);
     }
 
     private static TextCommandResult NoSpiderFound()

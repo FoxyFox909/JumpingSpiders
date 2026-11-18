@@ -13,7 +13,7 @@ namespace JumpingSpiders;
 ///
 /// Searches go through the vanilla POI registry (see BlockEntitySilkHammock), which files hammocks by chunk column,
 /// so a search only looks at the hammocks in the few chunk columns around the centre instead of scanning blocks.
-/// The registry only exists on the server, so FindNearestFree, FindAllWithin and HasHammockWithinSpacing find
+/// The registry only exists on the server, so FindNearestFree, FindAllWithin and FindHammockWithinSpacing find
 /// nothing on a client. Hammocks in chunks that are not loaded are not found (a spider there is not active either).
 /// </summary>
 public static class HammockFinder
@@ -60,35 +60,26 @@ public static class HammockFinder
     }
 
     /// <summary>
-    /// True when a hammock at pos would be too close to an existing one under the "one hammock per
-    /// spacing x spacing x spacing box" rule (see HammockSpacing). A hammock already at pos counts too. Server only.
+    /// An existing hammock that a hammock at pos would be too close to under the "one hammock per
+    /// spacing x spacing x spacing box" rule (see HammockSpacing), or null when there is none. A hammock already at pos
+    /// counts too. Server only.
     /// </summary>
-    public static bool HasHammockWithinSpacing(IWorldAccessor world, BlockPos pos, int spacing)
+    public static BlockEntitySilkHammock FindHammockWithinSpacing(IWorldAccessor world, BlockPos pos, int spacing)
     {
         if (pos == null)
         {
-            return false;
+            return null;
         }
         List<BlockEntitySilkHammock> nearby = FindAllWithin(world, CellCenter(pos), SpacingSearchRange(spacing));
-        return ConflictsWithAny(pos, nearby, spacing);
-    }
-
-    /// <summary>True when a hammock at pos would break the spacing rule against any hammock in the list.</summary>
-    public static bool ConflictsWithAny(BlockPos pos, List<BlockEntitySilkHammock> hammocks, int spacing)
-    {
-        for (int i = 0; i < hammocks.Count; i++)
+        for (int i = 0; i < nearby.Count; i++)
         {
-            BlockPos other = hammocks[i].Pos;
-            if (other.dimension != pos.dimension)
+            BlockPos other = nearby[i].Pos;
+            if (other.dimension == pos.dimension && HammockSpacing.Conflicts(pos.X, pos.Y, pos.Z, other.X, other.Y, other.Z, spacing))
             {
-                continue;
-            }
-            if (HammockSpacing.Conflicts(pos.X, pos.Y, pos.Z, other.X, other.Y, other.Z, spacing))
-            {
-                return true;
+                return nearby[i];
             }
         }
-        return false;
+        return null;
     }
 
     /// <summary>

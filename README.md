@@ -5,8 +5,7 @@ its prey, and the Silk Hammock block it sleeps in.
 
 Both adult sexes share the real adult model, with walk, run and jump animations, and two texture variants that
 are still being painted; the female draws her pedipalps smaller. The spiderling's model and texture are
-placeholders (a box with a vanilla hare texture), as is the linen on the hammock's untextured faces. See
-[Assets to make](#assets-to-make).
+placeholders (a box with a vanilla hare texture). See [Assets to make](#assets-to-make).
 
 ## Build and run
 
@@ -65,7 +64,7 @@ This version reworked hammock building: it removed `HammockHeightBias`, `Hammock
 `HammockBuildSearchUp` (8 to 5) and `HammockBuildSearchDown` (3 to 2), and added `HammockBuildIntervalHours` and
 `HammockBuildRange`. `HammockBuildRange` has since changed from 2 to 0.5: a `jumpingspiders.json` written by the
 version before keeps 2 (spiders then build from farther off), so set it to 0.5 there or delete the file. It changed `CuriosityStayUpHoursMax` (3 to 1.8) and added the nap knobs `NapSlotHours`,
-`NapChanceMax`, `NapMinMinutes` and `NapMaxMinutes`.
+`NapChanceMax`, `NapMinMinutes` and `NapMaxMinutes`. The latest version adds `DebugLogging` (see [Debug log](#debug-log)).
 
 Per-task knobs are in the entity JSON (`assets/jumpingspiders/entities/land/jumpingspider-adult.json` and
 `-baby.json`), next to the task they belong to:
@@ -78,7 +77,7 @@ Per-task knobs are in the entity JSON (`assets/jumpingspiders/entities/land/jump
 | Jump angle, maximum speed | `JumpAngleDeg`, `MaxJumpSpeed` in the config | 50 degrees, 18 |
 | How high, far and deep a jump goes | `MaxJumpUp`, `MaxJumpHorizontal`, `MaxJumpDown` | 4, 6, 6 blocks |
 | How fast a jump is flown (same arc, same landing spot; 1 = the game's natural gravity) | `JumpFlightSpeedMultiplier` in the config | 1.45 |
-| Jumps per plan | `MaxPlannedJumps` | 2 |
+| Jumps per plan | `MaxPlannedJumps` | 2 (3 or more makes one plan search cost tens of milliseconds) |
 | Curiosity (rolled per spider per day) | `CuriosityMin`, `CuriosityMax`, `CuriosityNightMultiplier` | 0.2 to 1.0, times 0.2 at night |
 | How long a domesticated spider stays up after dusk | `CuriosityStayUpHoursMax`, `CuriosityStayUpMaxNightShare` | curiosity times 1.8 in-game hours, at most half the night |
 | Daytime naps | `NapSlotHours`, `NapChanceMax`, `NapMinMinutes`, `NapMaxMinutes` | one roll per 2-hour slot, chance 0.3 for the least curious falling to 0 for the most curious, 30 to 60 in-game minutes |
@@ -98,6 +97,19 @@ Per-task knobs are in the entity JSON (`assets/jumpingspiders/entities/land/jump
 
 `DomesticatedFromGeneration` in the config and the `maxGeneration: 0` / `minGeneration: 1` values in the entity
 JSON must be changed together.
+
+A setting in `jumpingspiders.json` that would break the mod (a negative search radius, an interval or spacing of 0, a
+share or chance outside 0 to 1, a maximum below its minimum, and the like) is corrected when the world starts, with a
+warning in the server log naming the setting and the value used instead. The file keeps what you wrote, so the
+warning comes back until you fix it there.
+
+## Debug log
+
+Set `"DebugLogging": true` in `ModConfig/jumpingspiders.json` and restart the world to have every spider write what it
+decides and why (each jump, hunt, flee, bedtime, nap and build attempt, with how long the attempt took) to
+`Logs/server-debug.log` in the game's data folder, lines starting with `[jumpingspiders]`. Wild spawning logs there
+too. It is off by default, and then the mod does not even put those lines together. Please switch it on, reproduce
+the problem and attach that log when you report one. The `/jspider` replies work either way.
 
 ## Debug commands
 
@@ -237,6 +249,8 @@ Please also keep an eye on server performance with many spiders, and on spiders 
   least curious nap about twice a day and the most curious never. A nap lasts 30 to 60 in-game minutes in a
   hammock, never on the bare ground; one that runs into dusk becomes the night's sleep.
 - A spider with no free hammock within 24 blocks sleeps where it stands.
+- A spider hit while it holds on to a wall or ceiling to build a hammock lets go and drops, and that attempt fails (the
+  next one comes an hour later).
 - Spiders take no fall damage.
 - A dead spider disappears once it has been harvested, or after 4 in-game days (2 for a spiderling). It leaves no
   bone pile behind.
@@ -250,7 +264,7 @@ or change the paths in the entity, block and item JSON.
 |---|---|
 | `shapes/entity/land/jumpingspider/male.json` | The real adult model, for both sexes despite its name, with `walk`, `run`, `jumpwindup`, `jump` and `sleep`. Its textures are `textures/male.png` and `textures/male2.png` (both sexes), still being painted |
 | `shapes/entity/land/jumpingspider/baby.json` | Placeholder box model with a vanilla hare texture (code `skin`). The spiderling will get its own model and texture, based on the adult model and its animations |
-| `shapes/block/silkhammock-wall.json` | The one hammock model for all twelve variants. Back panel on the east (+X) side, opening to the west (-X); the block JSON turns it to each wall, to each opening direction under a ceiling, and upside down and to each opening direction on the floor. Texture code `silk`; the cradle's untextured faces (`#null`) are mapped to the same placeholder linen in the block JSON until they get a texture |
+| `shapes/block/silkhammock-wall.json` | The one hammock model for all twelve variants: seven boxes, two roof plates, four cradle panels and a back. Back on the east (+X) side, opening to the west (-X); the block JSON turns it to each wall, to each opening direction under a ceiling, and upside down and to each opening direction on the floor. Every face uses the texture `textures/silk_hammock.png` (texture code `silk_hammock`) |
 
 Animations each spider shape needs, with these exact lowercase codes:
 

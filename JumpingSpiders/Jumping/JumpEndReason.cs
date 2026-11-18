@@ -18,9 +18,6 @@ public enum JumpEndReason
     /// <summary>It came down in water (or lava).</summary>
     Water,
 
-    /// <summary>It died in the air.</summary>
-    Died,
-
     /// <summary>It never left the ground (something held it down, or a block was right above it).</summary>
     NoLiftoff,
 

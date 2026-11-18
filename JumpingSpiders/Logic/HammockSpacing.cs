@@ -11,7 +11,7 @@ namespace JumpingSpiders;
 /// it, because any two of those fit together in some 3 x 3 x 3 box.
 ///
 /// The rule covers every hammock, whoever placed it: a spider building one, wild spawning, a player.
-/// HammockFinder.HasHammockWithinSpacing (in the Hammock folder) uses this to check the hammocks around a spot.
+/// HammockFinder.FindHammockWithinSpacing (in the Hammock folder) uses this to check the hammocks around a spot.
 /// </summary>
 public static class HammockSpacing
 {

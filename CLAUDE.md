@@ -106,8 +106,6 @@ cd "$VINTAGE_STORY" && (sleep 70; echo "/stop") | timeout 170 dotnet Vintagestor
 - Console commands can be piped in before `/stop`. `/jspider spawn nohammock day` and `/jspider info` work from
   the console; vanilla `/entity spawn` does not.
 - Expect no errors or warnings from the mod. "Server overloaded" warnings during world generation are normal.
-- `./build.sh` (Cake) leaves `bin/Release/Mods/mod/publish/`; delete it before a smoke test or the server
-  reports a bogus mod error.
 - Two servers at once need different `--port` values and data folders.
 - The official sources are at github.com/anegostudios (`vsapi`, `vsessentialsmod`, `vssurvivalmod`); check out
   the 1.22.7 tag and read them instead of guessing API behaviour. The client and server cores are closed; decompile
@@ -122,7 +120,9 @@ player nearby**. To exercise behaviour:
 2. In it, force-load chunks (`sapi.WorldManager.LoadChunkColumnPriority(cx, cz, new ChunkLoadOptions { KeepLoaded
    = true, OnLoaded = ... })`), build a small scene, spawn entities, then drive them by hand: the entity's
    game tick, its physics tick (jumps depend on the per-physics-tick callback), and the calendar for time of day.
-3. Log what happened, compare with what you expected, and **delete the file before you finish**.
+3. Log what happened, compare with what you expected, and **delete the file before you finish**. Put
+   `{"DebugLogging": true}` in the data folder's `ModConfig/jumpingspiders.json` to get the spiders' own account of
+   what they decided in `Logs/server-debug.log`; it is off by default.
 
 A hare can stand in for a player in flee and attack tests. Things this cannot show: rendering, animation
 blending, interpolation between server ticks, and anything that needs a real `IPlayer`.

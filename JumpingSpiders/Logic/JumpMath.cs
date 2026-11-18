@@ -59,8 +59,12 @@ public static class JumpMath
     /// <summary>When the preferred angle cannot reach the target, try angles this many degrees apart.</summary>
     public const double AngleSearchStepDeg = 5.0;
 
-    /// <summary>How many halvings the speed search does. 50 is far more precise than needed and still cheap.</summary>
-    public const int SpeedSearchIterations = 50;
+    /// <summary>
+    /// How many halvings the speed search does: 25 leave the launch speed within 18 / 2^25 (about 5e-7) blocks per
+    /// second. Checked against 50: every solved jump of the unit tests' grid keeps its landing tick, and lands within
+    /// 2e-9 blocks of its target both in the engine simulator and on a 1.22.7 server, the same as with 50.
+    /// </summary>
+    public const int SpeedSearchIterations = 25;
 
     /// <summary>
     /// How far (blocks) JumpController may move the spider sideways in one physics tick beyond the planned move, to
@@ -272,6 +276,10 @@ public static class JumpMath
     /// Returns false when the target is out of reach: beyond MaxJumpUp, MaxJumpDown or MaxJumpHorizontal,
     /// too fast for MaxJumpSpeed at every allowed angle, longer than MaxFlightSeconds, or straight up.
     ///
+    /// Only the unit tests call this (and CreateJump and PositionAt): they are the reference model the tests check the
+    /// planner and the engine simulator against. The mod plans through JumpPlanner.TryJump, which walks the same
+    /// angles itself so that it can check each arc against the blocks.
+    ///
     /// How it works: it first tries the preferred launch angle, then angles further and further away from it,
     /// within MinJumpAngleDeg..MaxJumpAngleDeg. For one angle it searches the launch speed at which the arc comes
     /// down through the target height exactly at the target distance. The landing then happens during some physics
@@ -352,6 +360,7 @@ public static class JumpMath
 
     /// <summary>
     /// Convenience wrapper around SolveLaunch: a complete JumpStep between two feet positions, or null when out of reach.
+    /// Only the unit tests use it.
     /// </summary>
     public static JumpStep CreateJump(double fromX, double fromY, double fromZ, double toX, double toY, double toZ, JumpLimits limits)
     {
@@ -372,7 +381,8 @@ public static class JumpMath
     /// <summary>
     /// Feet position of the spider t seconds after take-off, following the model. Between physics ticks the
     /// position is interpolated in a straight line, as the engine moves it in one go per tick. During the last
-    /// tick the spider does not go below the landing height (the landing surface stops it).
+    /// tick the spider does not go below the landing height (the landing surface stops it). Only the unit tests use
+    /// it (FlightSchedule and JumpController follow the arc tick by tick instead).
     /// </summary>
     public static void PositionAt(JumpStep step, double t, out double x, out double y, out double z)
     {
