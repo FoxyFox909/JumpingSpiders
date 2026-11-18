@@ -150,7 +150,10 @@ blending, interpolation between server ticks, and anything that needs a real `IP
 8. **Hammocks.** One model serves walls, ceilings and floors, turned by the block JSON. Only domesticated adults
    build: one hammock per kill, attempted hourly while sated, at a random spot with no height preference, at
    most one hammock per 3x3x3, and only from within `HammockBuildRange` (0.5) of the spot. Wild spiders have one
-   home hammock on a tree trunk and never build.
+   home hammock on a tree trunk and never build. **Any kill earns the hammock**, wild prey included; the author
+   wants non-farm animals to count. An escaped domesticated spider is deliberately not restricted: the engine
+   runs no AI beyond 128 blocks from a player, and that is the only limit wanted. Do not add a player-distance,
+   farm-prey or home-range rule for building without asking.
 9. **Wild spawning** is done by mod code, not JSON spawn conditions or world generation, in "spider chunks" (a
    fixed share of chunk columns chosen from the world seed).
 10. **Enclosures** are meant to need tall fences or a roof.
