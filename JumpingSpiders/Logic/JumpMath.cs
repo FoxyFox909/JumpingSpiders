@@ -16,7 +16,9 @@ namespace JumpingSpiders;
 ///
 /// The arc (the "natural arc") is planned as if the game's own physics flew the whole jump: the vertical part
 /// exactly as gravity and drag would move it, the horizontal part at a constant speed. Checked on a real 1.22.7
-/// server: the game's physics follows this model to 0.00001 blocks per tick. The model assumes default physics:
+/// server: the game's physics follows this model to 0.00001 blocks per tick. Game version 1.23.0-pre.2 gives the same
+/// numbers for gravity, drag and ground friction; the one difference is that it leaves a creature standing on a block
+/// 0.0001 blocks above it (see ReachTolerance). The model assumes default physics:
 /// the entity JSON must not change gravityFactor, airDragFallingFactor or groundDragFactor (attributes.physics).
 ///
 /// In the game the spider flies that same arc faster (Config.JumpFlightSpeedMultiplier): FlightSchedule says where
@@ -28,7 +30,7 @@ namespace JumpingSpiders;
 /// </summary>
 public static class JumpMath
 {
-    // ---- Engine constants (Vintage Story 1.22.7). These are not design knobs: they must match the game. ----
+    // ---- Engine constants (Vintage Story 1.22.7, unchanged in 1.23.0-pre.2). Not design knobs: they must match the game. ----
 
     /// <summary>Length of one server physics tick, seconds (PhysicsManager: tickInterval = 1/30).</summary>
     public const double PhysicsTickSeconds = 1.0 / 30.0;
@@ -90,6 +92,14 @@ public static class JumpMath
 
     /// <summary>Slack (blocks or blocks per second) when comparing against limits, against rounding errors.</summary>
     public const double LimitTolerance = 1e-6;
+
+    /// <summary>
+    /// Slack (blocks) on how far a jump may reach: MaxJumpHorizontal, MaxJumpUp and MaxJumpDown. Game version 1.23 leaves
+    /// a creature that stands on a block 0.0001 blocks above it (1.22.7 put it exactly on top), so a drop of exactly
+    /// MaxJumpDown, measured from the spider's real feet, is 0.0001 too long. This slack lets that jump through; nobody
+    /// could see a jump that much longer.
+    /// </summary>
+    public const double ReachTolerance = 0.001;
 
     /// <summary>
     /// One physics tick of vertical motion: gravity, then air drag, exactly as PModuleGravity and PModuleMotionDrag do it.
@@ -342,15 +352,15 @@ public static class JumpMath
         {
             return false;
         }
-        if (distance > limits.MaxJumpHorizontal + LimitTolerance)
+        if (distance > limits.MaxJumpHorizontal + ReachTolerance)
         {
             return false;
         }
-        if (dy > limits.MaxJumpUp + LimitTolerance)
+        if (dy > limits.MaxJumpUp + ReachTolerance)
         {
             return false;
         }
-        if (-dy > limits.MaxJumpDown + LimitTolerance)
+        if (-dy > limits.MaxJumpDown + ReachTolerance)
         {
             return false;
         }

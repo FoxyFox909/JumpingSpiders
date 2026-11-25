@@ -1,7 +1,8 @@
 # Jumping Spiders
 
 A Vintage Story code mod (game version 1.22.7) that adds the Jumping Spider, a passive predator that leaps onto
-its prey, and the Silk Hammock block it sleeps in.
+its prey, and the Silk Hammock block it sleeps in. A build for the 1.23 pre-release (1.23.0-pre.2) is being
+prepared; see [Game version 1.23](#game-version-123).
 
 Both adult sexes share the real adult model, with walk, run and jump animations, and two texture variants that
 are still being painted; the female draws her pedipalps thinner. The spiderling's model and texture are
@@ -10,6 +11,9 @@ placeholders (a box with a vanilla hare texture). See [Assets to make](#assets-t
 ## Build and run
 
 Set the `VINTAGE_STORY` environment variable to the game's install folder (the one holding `VintagestoryAPI.dll`).
+The mod is built against whichever game version that folder holds, and the DLL only works on that version: build
+once with `VINTAGE_STORY` pointing at a 1.22.7 install and once at a 1.23 install to get both (see
+[Game version 1.23](#game-version-123)).
 
 ```bash
 dotnet build JumpingSpiders/JumpingSpiders.csproj -c Release
@@ -175,6 +179,8 @@ Use creative mode, `/time set` to move between day and night, and `/jspider info
 **Taming and breeding**
 15. Release a trapped male and female into a pen with farm-born chickens or hares (generation 1 or more).
     They hunt when hungry. After 2 valid kills by the female and 1 by the male, the female becomes pregnant.
+    A female that has just been spawned, caught or born first waits out the vanilla breeding cooldown of 3 to 6
+    in-game days (`multiplyCooldownDaysMin`/`Max`), so take that into account or use `/time` to skip ahead.
 16. Wild chickens, wild hares, raccoons, troughs and meat on the ground give no breeding progress.
 17. A caught wild spider still flees from you, never builds a hammock, and adopts a free hammock near the pen.
 18. The babies are generation 1: they do not flee from you. As adults, each kill earns one hammock: while
@@ -339,7 +345,36 @@ little room to jump into the cradle, so the ceiling hammock has a thin floor at 
 lands there and is lifted into the cradle as it falls asleep (and put back down when it wakes). If the model's
 cradle moves a lot, change `sleepFeetHeight` and the wall slab (keep the two equal) so the legs still clear the silk.
 
+## Game version 1.23
+
+The mod was written for 1.22.7. Against the 1.23 pre-release 1.23.0-pre.2 it builds with no warnings, its unit tests
+pass, and the stories in the in-game checklist were run on headless 1.22.7 and 1.23.0-pre.2 servers side by side
+(jumps, hunting, fleeing, bedtime in wall, ceiling and floor hammocks, naps, hammock building, wild spawning, basket
+traps, breeding, growing up, rivals, broken hammocks, harvesting, texture variants, the female's pedipalps): the
+results match, except where listed below. Nothing has been seen in a 1.23 game client yet.
+
+- **One DLL per game version.** 1.23 changed the signatures of the pathfinder methods the spiders walk with, so a
+  DLL built against 1.22.7 runs on 1.23 but its spiders cannot walk (and the reverse fails the same way); the server
+  log fills with `Method not found` errors. Build against each version separately.
+- **Spider chunks move once when a 1.22.7 world is opened in 1.23.** Spider chunks are chosen from the world's
+  `Seed`, and 1.23 turned that into a random number that is no longer the world generation seed: a world from 1.22.7
+  gets a new random one the first time 1.23 loads it, and each new 1.23 world gets its own, so two worlds made
+  with the same seed text no longer share spider chunks. Wild hammocks and spiders already in the world stay
+  where they are; new wild spiders appear in the new spider chunks. This is not decided yet.
+- **Breeding.** 1.23 stops animals from getting pregnant in crowded conditions: no pregnancy while more than 8
+  creatures tagged `animal` (spiders, their prey, other livestock) are within 4 blocks, or more than 32 within 8.
+  Pregnancy now lasts 4 days give or take 4 %. The rest (2 meals for the female, 1 for the male, 1 to 3 babies,
+  the cooldowns) is unchanged.
+- **Knockback** in 1.23 depends on the weights of attacker and victim and pushes sideways instead of up. By the
+  1.23 source (not yet seen in game), a player's hit pushes a spider about three times as hard as before, and a
+  spider's bite hardly moves a player.
+- 1.23 leaves a creature standing on a block 0.0001 blocks above it, which made a drop of exactly `MaxJumpDown`
+  (6 blocks) unplannable; the jump planner now allows for that, on both versions.
+
+Not checked on 1.23: anything in a game client (the spider and hammock models, animations, textures, the female's
+pedipalps on screen, sounds, the info text), and anything that needs a real player.
+
 ## Not in this version
 
 - PetAI integration.
-- A port to game version 1.23.
+- A finished port to game version 1.23: the 1.23 build has only been run on a headless 1.23.0-pre.2 server.

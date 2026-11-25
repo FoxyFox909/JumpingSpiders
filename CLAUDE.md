@@ -10,7 +10,9 @@ Guidance for AI agents working in this repository. People should start with `REA
   bred in captivity, sleeps and naps in hammocks, and builds them;
 - the **Silk Hammock** block, which spiders sleep in and players harvest for flax twine.
 
-The author is Aurora_Luciri. A port to game version 1.23 and PetAI integration are on the roadmap, not started.
+The author is Aurora_Luciri. A port to game version 1.23 is in progress: the mod builds and runs on the 1.23.0-pre.2
+headless server (README "Game version 1.23" has what was checked and what differs). PetAI integration is on the
+roadmap, not started.
 
 `README.md` is the reference for what the mod does: features, every knob and its default, the `/jspider` debug
 commands, the in-game test checklist and "Behaviour worth knowing". Read it before changing behaviour, and
@@ -90,12 +92,20 @@ the project; they describe the engine, not this mod's current design.
 
 ## Build, test, run
 
-`VINTAGE_STORY` must point at a 1.22.7 install (the folder with `VintagestoryAPI.dll`).
+`VINTAGE_STORY` must point at a game install (the folder with `VintagestoryAPI.dll`): 1.22.7 for the release
+build, 1.23.0-pre.2 for the 1.23 build. Build and run-test against each version you change something for.
 
 ```bash
-dotnet build JumpingSpiders/JumpingSpiders.csproj -c Release
+VINTAGE_STORY=/path/to/1.22.7 dotnet build JumpingSpiders/JumpingSpiders.csproj -c Release
+VINTAGE_STORY=/path/to/1.23.0-pre.2 dotnet build JumpingSpiders/JumpingSpiders.csproj -c Release
 dotnet test JumpingSpiders.Tests/JumpingSpiders.Tests.csproj
 ```
+
+- **A DLL only works on the version it was built against.** 1.23 added optional parameters to
+  `PathTraverserBase.NavigateTo_Async` and `WalkTowards`, so `Walker`'s calls compile to a signature the other
+  version does not have: the mod loads, then every walk throws `Method not found` (checked both ways). Run the
+  server you test on with a DLL built against that same install.
+- `modinfo.json`'s `"game"` dependency is a minimum version; 1.23 still loads a mod that asks for 1.22.7.
 
 Smoke test on the dedicated server (use a fresh data folder each time):
 
@@ -110,8 +120,12 @@ cd "$VINTAGE_STORY" && (sleep 70; echo "/stop") | timeout 170 dotnet Vintagestor
 - Expect no errors or warnings from the mod. "Server overloaded" warnings during world generation are normal.
 - Two servers at once need different `--port` values and data folders.
 - The official sources are at github.com/anegostudios (`vsapi`, `vsessentialsmod`, `vssurvivalmod`); check out
-  the 1.22.7 tag and read them instead of guessing API behaviour. The client and server cores are closed; decompile
-  `VintagestoryLib.dll` with `ilspycmd` when you need them.
+  the 1.22.7 tag and read them instead of guessing API behaviour. For 1.23 the repositories' `master` is
+  1.23.0-pre.1; pre-release builds newer than that are not published, so decompile the install's
+  `VintagestoryAPI.dll` and `Mods/*.dll` where the exact behaviour matters. The client and server cores are closed;
+  decompile `VintagestoryLib.dll` with `ilspycmd` when you need them (the server download contains the client code
+  too). Server downloads have no textures or sounds; the client download (`vs_client_linux-x64_<version>.tar.gz`
+  under cdn.vintagestory.at/gamefiles/stable or /pre) has them.
 
 ## Testing without a client
 
@@ -126,7 +140,8 @@ player nearby**. To exercise behaviour:
    `{"DebugLogging": true}` in the data folder's `ModConfig/jumpingspiders.json` to get the spiders' own account of
    what they decided in `Logs/server-debug.log`; it is off by default.
 
-A hare can stand in for a player in flee and attack tests. Things this cannot show: rendering, animation
+A hare can stand in for a player in flee and attack tests. In 1.23 hares have the vanilla `gait` behavior, which
+overwrites `Controls.WalkVector` every tick: remove it from the stand-in's behavior list if you steer it by hand. Things this cannot show: rendering, animation
 blending, interpolation between server ticks, and anything that needs a real `IPlayer`.
 
 ## Design decisions made with the author
@@ -162,7 +177,9 @@ blending, interpolation between server ticks, and anything that needs a real `IP
 
 **Entities and AI**
 
-- Physics runs at 30 ticks a second; `Motion` is in blocks per 1/60 s. Do not set `attributes.physics` on the
+- Physics runs at 30 ticks a second; `Motion` is in blocks per 1/60 s. Gravity, drag and ground friction measure
+  the same on 1.22.7 and 1.23.0-pre.2, but 1.23 leaves a creature standing on a block 0.0001 above it (1.22.7: exactly
+  on it); `JumpMath.ReachTolerance` covers that, so never compare a spider's feet with a stand height exactly. Do not set `attributes.physics` on the
   spider: the jump model was measured against default physics. `fallDamageMultiplier` must stay 0.
 - A jump is planned once (`Logic/JumpPlanner`), then `Jumping/JumpController` flies it by setting the motion
   after every physics tick so the next tick ends on the planned arc. Plan when a decision is made, never every
@@ -172,7 +189,12 @@ blending, interpolation between server ticks, and anything that needs a real `IP
   with a higher priority than the running task's `priorityForCancel`. The classic `AiTaskBase` family is used
   (constructor `(EntityAgent, JsonObject taskConfig, JsonObject aiConfig)`); it does not enforce cooldowns for you.
 - "Night" is `SpiderAttributes.IsNight` (sun below the horizon) everywhere.
-- Breeding uses vanilla `multiply`, which reads `WatchedAttributes["hunger"].saturation`. A kill does not feed
+- `World.Seed` is the world generation seed in 1.22.7 only. In 1.23 it is a random number per world (an old world
+  gets a new one when 1.23 first loads it); the generation seed is `SeedWorldgen`, which 1.22.7 does not have.
+  Spider chunks use `World.Seed`, so they move once when a world is upgraded. Changing that is the author's call.
+- Breeding uses vanilla `multiply`, which reads `WatchedAttributes["hunger"].saturation`. A new female first
+  waits out a 3 to 6 day cooldown. 1.23 adds a crowding rule (no pregnancy with more than 8 `animal`-tagged
+  creatures within 4 blocks) and varies the pregnancy length by 4 %. A kill does not feed
   an entity by itself; the mod credits meals and reverts saturation that was not earned by a valid kill.
 - Texture variants come from `alternates` on the entity's **first** texture only.
 
@@ -184,7 +206,8 @@ blending, interpolation between server ticks, and anything that needs a real `IP
   `silkhammock-up` and `silkhammock-down` mean "opens west" for that reason.
 - A changed default in `JumpingSpidersConfig.cs` does not reach players who already have
   `ModConfig/jumpingspiders.json`; say so in the README when you change one.
-- Shears have no mining speed in 1.22.7; the hammock's shears bonus is in `BlockSilkHammock.OnGettingBroken`.
+- Shears have no mining speed in 1.22.7 or 1.23.0-pre.2; the hammock's shears bonus is in
+  `BlockSilkHammock.OnGettingBroken`.
 - Blocks draw half-transparent pixels only with `renderpass: "Transparent"`.
 
 **Shape files (VS Model Creator)**
@@ -228,4 +251,5 @@ diff. Keep it that way: extend `vsmc_writer.py` when the editor starts writing s
 ## Not done
 
 - No one has reviewed the mod's behaviour in the game client end to end; `README.md` has the checklist.
-- PetAI integration, and a port to game version 1.23.
+- PetAI integration. The 1.23 port has run only on a headless 1.23.0-pre.2 server; nothing has been checked in a
+  1.23 client, and the decisions listed in README "Game version 1.23" are open.

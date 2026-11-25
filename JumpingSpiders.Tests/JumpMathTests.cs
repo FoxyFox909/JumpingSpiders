@@ -93,6 +93,20 @@ public class JumpMathTests
     }
 
     [Fact]
+    public void FullDropFromTheRestingHeightOfGameVersion123IsSolvable()
+    {
+        // 1.23 leaves a creature standing on a block 0.0001 above it, so a drop of the full MaxJumpDown measured from
+        // the spider's real feet is that much longer than the limit (JumpMath.ReachTolerance).
+        JumpLimits limits = DefaultLimits();
+        double restingGap = 0.0001;
+        Assert.NotNull(JumpMath.CreateJump(0.5, 6 + restingGap, 0.5, 4, 0, 0.5, limits));
+        Assert.NotNull(JumpMath.CreateJump(0, restingGap, 0, limits.MaxJumpHorizontal + restingGap, 0, 0, limits));
+        // The slack is far too small to let a jump visibly beyond the limits through.
+        JumpStep result = new JumpStep();
+        Assert.False(JumpMath.SolveLaunch(2, -(limits.MaxJumpDown + 0.01), 0, limits, result));
+    }
+
+    [Fact]
     public void JumpUpFourBlocksLandsOnTargetWithEngineFriction()
     {
         JumpLimits limits = DefaultLimits();
