@@ -81,7 +81,7 @@ Per-task knobs are in the entity JSON (`assets/jumpingspiders/entities/land/jump
 | Jumps per plan | `MaxPlannedJumps` | 2 (3 or more makes one plan search cost tens of milliseconds) |
 | Curiosity (rolled per spider per day) | `CuriosityMin`, `CuriosityMax`, `CuriosityNightMultiplier` | 0.2 to 1.0, times 0.2 at night |
 | How long a domesticated spider stays up after dusk | `CuriosityStayUpHoursMax`, `CuriosityStayUpMaxNightShare` | curiosity times 1.8 in-game hours, at most half the night |
-| Daytime naps | `NapSlotHours`, `NapChanceMax`, `NapMinMinutes`, `NapMaxMinutes` | one roll per 2-hour slot, chance 0.3 for the least curious falling to 0 for the most curious, 30 to 60 in-game minutes |
+| Daytime naps | `NapSlotHours`, `NapChanceMax`, `NapMinMinutes`, `NapMaxMinutes` | one roll per 2-hour slot, chance 0.3 for the least curious falling to 0 for the most curious, 30 to 60 in-game minutes (in a hammock, else on the spot) |
 | Hours a spider stays sated after a kill | `SatedHoursAfterKill` | 12 |
 | One hammock per this many blocks cubed | `HammockSpacing` | 3 |
 | Hammock building: how often, how close the spider must be, where it picks | `HammockBuildIntervalHours`, `HammockBuildRange`, `HammockBuildSearchRadius`, `HammockBuildSearchUp`, `HammockBuildSearchDown` | one attempt per in-game hour, 0.5 blocks, within 6 blocks, 5 up to 2 down |
@@ -193,7 +193,8 @@ Use creative mode, `/time set` to move between day and night, and `/jspider info
     By day, spiders that are not very curious take naps of 30 to 60 in-game minutes in a hammock (their home
     hammock for wild ones), at different times from each other, and hop out afterwards as in the morning.
     `/jspider info` shows the nap chance per 2-hour slot and whether it is napping. A spider with no hammock it
-    can get to never naps. Walk up to a napping wild spider: it stays put; break its hammock: it attacks you.
+    can get to naps on the ground where it stands, and hops off afterwards. Walk up to a napping wild spider (in
+    a hammock or on the ground): it stays put; break its hammock: it attacks you.
 21. Hit a domesticated spider: it flees and never attacks. Break its hammock while it sleeps: no attack.
 22. Two adult males or two adult females fight when hungry. A male and a female do not. Babies are left alone.
 
@@ -250,7 +251,9 @@ Please also keep an eye on server performance with many spiders, and on spiders 
 - Spiders nap by day: once per 2-hour slot (shifted per spider by a random amount each day) a spider rolls for a
   nap with a chance of `NapChanceMax` (0.3) times how far its curiosity for the day is below the maximum, so the
   least curious nap about twice a day and the most curious never. A nap lasts 30 to 60 in-game minutes in a
-  hammock, never on the bare ground; one that runs into dusk becomes the night's sleep.
+  hammock, or on the ground where the spider stands when it has no free hammock within 24 blocks or cannot get to
+  the one it chose (as at night); one that runs into dusk becomes the night's sleep. A spider rolls only while it
+  stands on dry ground. A nap may interrupt a hammock build attempt; the next attempt comes an hour later.
 - A spider with no free hammock within 24 blocks sleeps where it stands.
 - A spider hit while it holds on to a wall or ceiling to build a hammock lets go and drops, and that attempt fails (the
   next one comes an hour later).

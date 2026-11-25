@@ -127,9 +127,10 @@ public class JumpingSpidersConfig
     // ---------------- Daytime naps ----------------
 
     /// <summary>
-    /// By day a spider may take a nap in a hammock (never on the bare ground). The day is cut into slots this many
-    /// in-game hours long, shifted per spider by a random 0 to NapSlotHours rolled at the start of each in-game day, and
-    /// the spider rolls for a nap once per slot. Every spider that sleeps at night naps, wild ones in their home hammock.
+    /// By day a spider may take a nap in a hammock, or where it stands when it has none it can get to. The day is cut
+    /// into slots this many in-game hours long, shifted per spider by a random 0 to NapSlotHours rolled at the start of
+    /// each in-game day, and the spider rolls for a nap once per slot. Every spider that sleeps at night naps, wild ones
+    /// in their home hammock.
     /// </summary>
     public double NapSlotHours = 2;
 
@@ -143,7 +144,7 @@ public class JumpingSpidersConfig
     /// </summary>
     public double NapChanceMax = 0.3;
 
-    /// <summary>Shortest nap, in in-game minutes, counted from falling asleep in the hammock.</summary>
+    /// <summary>Shortest nap, in in-game minutes, counted from falling asleep (in the hammock or on the spot).</summary>
     public double NapMinMinutes = 30;
 
     /// <summary>Longest nap, in in-game minutes. A nap still going at dusk simply goes on as the night's sleep.</summary>

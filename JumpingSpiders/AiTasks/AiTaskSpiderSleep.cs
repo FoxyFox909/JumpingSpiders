@@ -16,10 +16,15 @@ namespace JumpingSpiders;
 /// by a random amount each day) the spider rolls for a nap with SpiderAttributes.GetNapChance (higher for less curious
 /// spiders). A won roll sends it to a hammock exactly as at night (its home hammock, or a free one), where it sleeps
 /// for a random Config.NapMinMinutes to NapMaxMinutes, counted from falling asleep, then hops out as in the morning.
-/// A nap is never taken on the bare ground: with no hammock, or none it can get to, there is no nap. While napping it
-/// is asleep in every other way too (the sleeping flag; a wild one does not flee a player walking up; breaking its
-/// hammock angers it). A nap still going at dusk becomes the night's sleep. The slot rolled and the nap's end are saved
-/// on the spider, so a reload or restart neither rolls twice in a slot nor loses a nap under way.
+/// With no free hammock within reach, or when it gives up on getting to the one it chose, it naps where it stands,
+/// just as it sleeps on the spot at night. The roll needs the same footing as going to bed at night (standing, out
+/// of water), so a nap never starts in the air or in water. While napping it is asleep in every other way too (the
+/// sleeping flag; a wild one does not flee a player walking up; breaking its hammock angers it). A nap still going at
+/// dusk becomes the night's sleep. The slot rolled and the nap's end are saved on the spider, so a reload or restart
+/// neither rolls twice in a slot nor loses a nap under way.
+///
+/// A won roll pre-empts lower-priority tasks, a hammock build attempt among them (except in mid-air). The author is
+/// fine with that: the interrupted attempt counts as that hour's attempt, and the next one comes an hour later.
 ///
 /// (How the game drives a task: see AiTaskSpiderJumpAttack.)
 ///
@@ -116,7 +121,6 @@ public class AiTaskSpiderSleep : AiTaskBase
     private bool napping;      // this run of the task is a daytime nap
     private bool startNap;     // set by ShouldExecute when it decided on a nap (rolled now, or resumed after a reload)
     private double napHours;   // length of the nap rolled, in in-game hours; 0 = keep the saved end (resumed nap)
-    private bool endNow;       // a nap that cannot happen (no hammock): end the task at the next tick
 
     public AiTaskSpiderSleep(EntityAgent entity, JsonObject taskConfig, JsonObject aiConfig)
         : base(entity, taskConfig, aiConfig)
@@ -237,7 +241,13 @@ public class AiTaskSpiderSleep : AiTaskBase
         {
             if (SpiderAttributes.GetNapUntilHours(entity) > entity.World.Calendar.TotalHours)
             {
-                // Saved in the middle of a nap: go on with it, without waiting for the cooldown.
+                // Saved in the middle of a nap: go on with it, without waiting for the cooldown. As at night, not while
+                // in water (a nap on the spot can be anywhere): it goes on once out of the water, or, if the nap's end
+                // passes first, is woken by the branch below.
+                if (!PreconditionsSatisfied() || entity.Swimming || entity.FeetInLiquid)
+                {
+                    return false;
+                }
                 startNap = true;
                 napHours = 0;
                 return true;
@@ -292,7 +302,6 @@ public class AiTaskSpiderSleep : AiTaskBase
         base.StartExecute();
         napping = startNap;
         startNap = false;
-        endNow = false;
         if (!napping)
         {
             // A night's sleep: a nap of the day before (if any) is over.
@@ -319,11 +328,7 @@ public class AiTaskSpiderSleep : AiTaskBase
         HammockPos = ChooseHammock();
         if (HammockPos == null)
         {
-            if (napping)
-            {
-                EndNap("no free hammock within reach: no nap");
-                return;
-            }
+            // No free hammock within reach: sleep (or nap) right here.
             FallAsleep();
             return;
         }
@@ -334,10 +339,6 @@ public class AiTaskSpiderSleep : AiTaskBase
     {
         long now = entity.World.ElapsedMilliseconds;
 
-        if (endNow)
-        {
-            return false;
-        }
         if (hurt && wakeOnHurt)
         {
             if (SpiderTaskUtil.IsDebugLogOn())
@@ -684,25 +685,7 @@ public class AiTaskSpiderSleep : AiTaskBase
         }
         ReleaseHammock();
         HammockPos = null;
-        if (napping)
-        {
-            EndNap("never naps on the bare ground: no nap");
-            return;
-        }
         FallAsleep();
-    }
-
-    // A nap that cannot happen: the task ends at its next tick, the spider stays awake.
-    private void EndNap(string reason)
-    {
-        if (SpiderTaskUtil.IsDebugLogOn())
-        {
-            SpiderTaskUtil.Log(entity, LogName, reason);
-        }
-        runner.Stop();
-        walker.Stop();
-        Phase = SleepPhase.None;
-        endNow = true;
     }
 
     private bool IsInHammockCell()
@@ -759,6 +742,14 @@ public class AiTaskSpiderSleep : AiTaskBase
             if (SpiderTaskUtil.IsDebugLogOn())
             {
                 SpiderTaskUtil.Log(entity, LogName, "falls asleep in the hammock at " + HammockPos);
+            }
+        }
+        else if (napping)
+        {
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "naps on the spot at " + SpiderTaskUtil.Format(entity.Pos.X, entity.Pos.Y, entity.Pos.Z)
+                    + " until hour " + NapSchedule.HourOfDay(SpiderAttributes.GetNapUntilHours(entity), entity.World.Calendar.HoursPerDay).ToString("0.00"));
             }
         }
         else

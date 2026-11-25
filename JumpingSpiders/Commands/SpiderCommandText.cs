@@ -189,7 +189,7 @@ public static class SpiderCommandText
                 ShowHour(NapSchedule.HourOfDay(SpiderAttributes.GetNapUntilHours(spider), calendar.HoursPerDay)),
                 (SpiderAttributes.GetNapUntilHours(spider) - calendar.TotalHours) * 60);
         }
-        return string.Format("Nap chance per {0:0.#}-hour slot today: {1:0.0} % (by day only, in a hammock). Today's slots start at {2} and every {0:0.#} h; this slot (from {3}) rolled: {4}. Napping: {5}.",
+        return string.Format("Nap chance per {0:0.#}-hour slot today: {1:0.0} % (by day only; in a hammock if it can get to one, else on the spot). Today's slots start at {2} and every {0:0.#} h; this slot (from {3}) rolled: {4}. Napping: {5}.",
             config.NapSlotHours, SpiderAttributes.GetNapChance(spider) * 100, ShowHour(shift),
             ShowHour(NapSchedule.SlotStartHour(slot, shift, config.NapSlotHours)), rolled, napping);
     }
