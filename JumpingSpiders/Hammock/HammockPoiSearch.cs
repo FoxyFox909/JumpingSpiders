@@ -34,7 +34,7 @@ public class HammockPoiSearch
     /// <summary>
     /// Matcher that records every hammock and always says "no". GetNearestPoi only remembers matches, so answering
     /// no makes it visit every POI within the radius. (The registry's WalkPois would be the obvious method, but in
-    /// 1.22.7 it skips the last chunk column of the area, so it misses hammocks.)
+    /// 1.22.7 and 1.23.0-pre.2 it skips the last chunk column of the area, so it misses hammocks.)
     /// </summary>
     public bool CollectHammock(IPointOfInterest poi)
     {

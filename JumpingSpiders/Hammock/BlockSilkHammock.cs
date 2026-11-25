@@ -360,7 +360,7 @@ public class BlockSilkHammock : Block
 
     /// <summary>
     /// Runs on the client about every 40 ms while a player holds the break button on the hammock, and returns how
-    /// many seconds of breaking are left. dt is the time since the last call. In 1.22.7 (and 1.23.0-pre.2) shears have
+    /// many seconds of breaking are left. dt is the time since the last call. In 1.23.0-pre.2, as in 1.22.7, shears have
     /// no mining speed of their own, so we scale the time here when shears are held. The scaled dt also goes on to the
     /// held tool's own breaking code inside base.OnGettingBroken. The server does not re-check break times.
     /// </summary>

@@ -1,8 +1,8 @@
 # Jumping Spiders
 
-A Vintage Story code mod (game version 1.22.7) that adds the Jumping Spider, a passive predator that leaps onto
-its prey, and the Silk Hammock block it sleeps in. A build for the 1.23 pre-release (1.23.0-pre.2) is being
-prepared; see [Game version 1.23](#game-version-123).
+A Vintage Story code mod for game version 1.23 (built and tested against the pre-release 1.23.0-pre.2) that adds
+the Jumping Spider, a passive predator that leaps onto its prey, and the Silk Hammock block it sleeps in. It does
+not load on 1.22 or older; see [Game version 1.23](#game-version-123).
 
 Both adult sexes share the real adult model, with walk, run and jump animations, and two texture variants that
 are still being painted; the female draws her pedipalps thinner. The spiderling's model and texture are
@@ -10,10 +10,8 @@ placeholders (a box with a vanilla hare texture). See [Assets to make](#assets-t
 
 ## Build and run
 
-Set the `VINTAGE_STORY` environment variable to the game's install folder (the one holding `VintagestoryAPI.dll`).
-The mod is built against whichever game version that folder holds, and the DLL only works on that version: build
-once with `VINTAGE_STORY` pointing at a 1.22.7 install and once at a 1.23 install to get both (see
-[Game version 1.23](#game-version-123)).
+Set the `VINTAGE_STORY` environment variable to the install folder of a 1.23 game (the folder holding
+`VintagestoryAPI.dll`). The mod is built against the game in that folder.
 
 ```bash
 dotnet build JumpingSpiders/JumpingSpiders.csproj -c Release
@@ -347,29 +345,32 @@ cradle moves a lot, change `sleepFeetHeight` and the wall slab (keep the two equ
 
 ## Game version 1.23
 
-The mod was written for 1.22.7. Against the 1.23 pre-release 1.23.0-pre.2 it builds with no warnings, its unit tests
-pass, and the stories in the in-game checklist were run on headless 1.22.7 and 1.23.0-pre.2 servers side by side
-(jumps, hunting, fleeing, bedtime in wall, ceiling and floor hammocks, naps, hammock building, wild spawning, basket
-traps, breeding, growing up, rivals, broken hammocks, harvesting, texture variants, the female's pedipalps): the
-results match, except where listed below. Nothing has been seen in a 1.23 game client yet.
+The mod targets Vintage Story 1.23 and does not load on older versions: `modinfo.json` asks for at least
+1.23.0-pre.2, the pre-release it is built and tested against. It was written on 1.22.7 and moved over when the
+1.23 pre-releases came out; 1.22.7 is no longer supported. (1.23 changed the pathfinder methods the spiders walk
+with, so one build could not serve both.)
 
-- **One DLL per game version.** 1.23 changed the signatures of the pathfinder methods the spiders walk with, so a
-  DLL built against 1.22.7 runs on 1.23 but its spiders cannot walk (and the reverse fails the same way); the server
-  log fills with `Method not found` errors. Build against each version separately.
-- **Spider chunks move once when a 1.22.7 world is opened in 1.23.** Spider chunks are chosen from the world's
-  `Seed`, and 1.23 turned that into a random number that is no longer the world generation seed: a world from 1.22.7
-  gets a new random one the first time 1.23 loads it, and each new 1.23 world gets its own, so two worlds made
-  with the same seed text no longer share spider chunks. Wild hammocks and spiders already in the world stay
-  where they are; new wild spiders appear in the new spider chunks. This is not decided yet.
-- **Breeding.** 1.23 stops animals from getting pregnant in crowded conditions: no pregnancy while more than 8
-  creatures tagged `animal` (spiders, their prey, other livestock) are within 4 blocks, or more than 32 within 8.
-  Pregnancy now lasts 4 days give or take 4 %. The rest (2 meals for the female, 1 for the male, 1 to 3 babies,
-  the cooldowns) is unchanged.
-- **Knockback** in 1.23 depends on the weights of attacker and victim and pushes sideways instead of up. By the
-  1.23 source (not yet seen in game), a player's hit pushes a spider about three times as hard as before, and a
+What the move was checked with: the stories in the in-game checklist were run on headless 1.22.7 and 1.23.0-pre.2
+servers side by side (jumps, hunting, fleeing, bedtime in wall, ceiling and floor hammocks, naps, hammock building,
+wild spawning, basket traps, breeding, growing up, rivals, broken hammocks, harvesting, texture variants, the
+female's pedipalps), and the results matched. **Nothing has been seen in a 1.23 game client yet.**
+
+What 1.23 itself does differently, and what the mod does about it:
+
+- **Spider chunks belong to the world, not to its seed text.** They are chosen from the world's `Seed`, which in
+  1.23 is a random number each world gets when it is created, separate from the world generation seed (the game
+  keeps that one secret from clients). Two worlds made from the same seed text therefore have different spider
+  chunks. A world brought over from 1.22.7 gets a new `Seed` on its first load, so its spider chunks move once;
+  worlds from before 1.23 are not supported.
+- **Breeding follows the game's crowding rule.** 1.23 stops animals from getting pregnant in crowded conditions:
+  no pregnancy while more than 8 creatures tagged `animal` (spiders, their prey, other livestock) are within 4
+  blocks, or more than 32 within 8. The spiders use the game's defaults, so a small pen packed with spiders and
+  the chickens meant to feed them can stop them breeding: give them room. Pregnancy lasts 4 days give or take 4 %.
+- **Knockback** depends on the weights of attacker and victim and pushes sideways instead of up. By the 1.23
+  source (not yet seen in game), a player's hit pushes a spider about three times as hard as on 1.22.7, and a
   spider's bite hardly moves a player.
 - 1.23 leaves a creature standing on a block 0.0001 blocks above it, which made a drop of exactly `MaxJumpDown`
-  (6 blocks) unplannable; the jump planner now allows for that, on both versions.
+  (6 blocks) unplannable; the jump planner allows for that.
 
 Not checked on 1.23: anything in a game client (the spider and hammock models, animations, textures, the female's
 pedipalps on screen, sounds, the info text), and anything that needs a real player.
@@ -377,4 +378,4 @@ pedipalps on screen, sounds, the info text), and anything that needs a real play
 ## Not in this version
 
 - PetAI integration.
-- A finished port to game version 1.23: the 1.23 build has only been run on a headless 1.23.0-pre.2 server.
+- A check of the mod in a 1.23 game client: on 1.23 it has only been run on a headless 1.23.0-pre.2 server.
