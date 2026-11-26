@@ -5,14 +5,17 @@ namespace JumpingSpiders.Tests;
 
 /// <summary>
 /// A tiny block world for planner tests. Each block fills its cell from the bottom up to a height
-/// (1 = full block, 0.5 = slab). The spider is a box HalfWidth wide each way and Height tall, feet at the bottom centre.
+/// (1 = full block, 0.5 = slab), or from one height to another (SetPlate). The spider is a box HalfWidth wide each way
+/// and Height tall, feet at the bottom centre; the defaults are the adult spider's hitbox (hitboxSize 0.8 x 0.4 in the
+/// entity JSON).
 /// </summary>
-public class TestBlockWorld : IJumpWorld
+public class TestBlockWorld : IJumpWorld, ISolidPointWorld
 {
-    public double HalfWidth = 0.3;
-    public double Height = 0.5;
+    public double HalfWidth = 0.4;
+    public double Height = 0.4;
 
     private readonly Dictionary<long, double> blockTops = new Dictionary<long, double>();
+    private readonly Dictionary<long, double> blockBottoms = new Dictionary<long, double>();
 
     public void SetBlock(int x, int y, int z)
     {
@@ -21,7 +24,14 @@ public class TestBlockWorld : IJumpWorld
 
     public void SetBlock(int x, int y, int z, double top)
     {
+        SetPlate(x, y, z, 0, top);
+    }
+
+    /// <summary>A block that fills its cell only from bottom to top (a thin plate floating in the cell, say).</summary>
+    public void SetPlate(int x, int y, int z, double bottom, double top)
+    {
         blockTops[Key(x, y, z)] = top;
+        blockBottoms[Key(x, y, z)] = bottom;
     }
 
     /// <summary>Fills every cell of the box (inclusive corners) with full blocks.</summary>
@@ -58,8 +68,9 @@ public class TestBlockWorld : IJumpWorld
                     {
                         continue;
                     }
+                    double bottom = blockBottoms[Key(bx, by, bz)];
                     bool overlapX = x1 < bx + 1 - 1e-9 && x2 > bx + 1e-9;
-                    bool overlapY = y1 < by + top - 1e-9 && y2 > by + 1e-9;
+                    bool overlapY = y1 < by + top - 1e-9 && y2 > by + bottom + 1e-9;
                     bool overlapZ = z1 < bz + 1 - 1e-9 && z2 > bz + 1e-9;
                     if (overlapX && overlapY && overlapZ)
                     {
@@ -93,6 +104,19 @@ public class TestBlockWorld : IJumpWorld
             return false;
         }
         return !IsFree(x + 0.5, standY - 0.05, z + 0.5);
+    }
+
+    public bool IsSolidAt(double x, double y, double z)
+    {
+        int bx = (int)Math.Floor(x);
+        int by = (int)Math.Floor(y);
+        int bz = (int)Math.Floor(z);
+        double top;
+        if (!blockTops.TryGetValue(Key(bx, by, bz), out top))
+        {
+            return false;
+        }
+        return y - by <= top && y - by >= blockBottoms[Key(bx, by, bz)];
     }
 
     private static long Key(int x, int y, int z)

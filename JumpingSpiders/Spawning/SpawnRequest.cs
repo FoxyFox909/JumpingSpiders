@@ -5,8 +5,8 @@ using Vintagestory.API.MathTools;
 namespace JumpingSpiders;
 
 /// <summary>
-/// Everything WildSpiderSpawner.TrySpawn needs to try one wild spawn in one spider chunk, spelled out so that the
-/// periodic spawner, the /jspider spawn command and tests can each choose them. Plain data.
+/// Everything WildSpiderSpawner.TrySpawn needs to try one wild spawn in one spider chunk (or, forced, in any chunk),
+/// spelled out so that the periodic spawner, the /jspider spawn command and tests can each choose them. Plain data.
 /// Use Create to start from the config's values.
 /// </summary>
 public class SpawnRequest
@@ -29,8 +29,21 @@ public class SpawnRequest
     /// </summary>
     public bool CheckPlayerDistance = true;
 
-    /// <summary>When false, the per spider chunk cooldown after the last spawn is skipped.</summary>
-    public bool CheckCooldown = true;
+    /// <summary>
+    /// When true (for /jspider spawn), the rules about whether a spider should spawn in this chunk do not stop the
+    /// spawn: spider chunk, cooldown, climate, land claims, player-built blocks, kept spiders near, the cap, and
+    /// other mods' veto. Each one that would have refused is written to SpawnResult.BypassedRules instead. Only
+    /// what makes a spawn impossible (chunk not loaded, entity type missing, no room for the spider) still fails.
+    /// </summary>
+    public bool Forced = false;
+
+    /// <summary>
+    /// When not null, the spider spawns on the ground a few blocks from this point (WildSpiderSpawner's
+    /// ForcedSpawnMinDistance to ForcedSpawnMaxDistance) instead of somewhere in the chunk, and a hammock is looked
+    /// for and placed within Config.WildSpawnRadiusFromHammock of it. /jspider spawn passes the player's feet.
+    /// Null for natural spawns.
+    /// </summary>
+    public Vec3d SpawnNear;
 
     /// <summary>Most tree trunks tested with the jump planner when a new hammock must be placed.</summary>
     public int MaxTreesToTest;

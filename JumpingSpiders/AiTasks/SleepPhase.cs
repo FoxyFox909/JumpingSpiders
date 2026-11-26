@@ -9,6 +9,12 @@ public enum SleepPhase
     /// <summary>Jumping up to the hammock along a planned chain of jumps.</summary>
     Travelling,
 
+    /// <summary>
+    /// No jumps reach the hammock from here: looking for a spot to walk to from which they do (LaunchSpotFinder),
+    /// one planner search per tick.
+    /// </summary>
+    FindingLaunchSpot,
+
     /// <summary>Walking to a spot from which the hammock can be reached by jumping.</summary>
     Walking,
 

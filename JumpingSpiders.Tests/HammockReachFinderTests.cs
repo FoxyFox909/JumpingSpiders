@@ -12,7 +12,7 @@ namespace JumpingSpiders.Tests;
 public class HammockReachFinderTests
 {
     private static readonly RelativeBox HammockFloor = new RelativeBox(0, 0, 0, 1, 0.0625, 1);
-    private static readonly RelativeBox SpiderBox = new RelativeBox(-0.3, 0, -0.3, 0.3, 0.5, 0.3);
+    private static readonly RelativeBox SpiderBox = new RelativeBox(-0.4, 0, -0.4, 0.4, 0.4, 0.4);
 
     private static TestBlockWorld TreeWorld()
     {
@@ -167,6 +167,35 @@ public class HammockReachFinderTests
         {
             Assert.False(candidates[i].Reachable);
         }
+    }
+
+    [Fact]
+    public void GroundStartsAreTheSameAsBeforeTheSharedColumnScan()
+    {
+        // A mound one block high east of the trunk with a two-block step on it, a slab and a pillar too high to stand
+        // on. The spots are the ones FindGroundStarts found before it used StandSpotScan.FirstInColumn.
+        TestBlockWorld world = TreeWorld();
+        world.Fill(1, 1, -3, 3, 1, -1);
+        world.Fill(2, 2, -3, 3, 3, -2);
+        world.SetBlock(-2, 1, 2, 0.5);
+        world.Fill(-3, 1, -3, -3, 4, -3);
+        List<StandSpot> starts = HammockReachFinder.FindGroundStarts(world, 0, 1, 0, 3, 2, 2);
+        // 48 columns around the trunk, less the pillar and the four columns of the step (their tops are 3 above).
+        Assert.Equal(43, starts.Count);
+        string[] expectedFirst = new string[] { "-3,1,-2", "-3,1,-1", "-3,1,0", "-3,1,1", "-3,1,2", "-3,1,3", "-2,1,-3" };
+        for (int i = 0; i < expectedFirst.Length; i++)
+        {
+            Assert.Equal(expectedFirst[i], starts[i].CellX + "," + starts[i].CellY + "," + starts[i].CellZ);
+        }
+        string[] expectedFromTheMound = new string[] { "1,2,-3", "1,2,-2", "1,2,-1", "1,1,0", "1,1,1", "1,1,2", "1,1,3",
+            "2,2,-1", "2,1,0", "2,1,1", "2,1,2", "2,1,3", "3,2,-1", "3,1,0", "3,1,1", "3,1,2", "3,1,3" };
+        for (int i = 0; i < expectedFromTheMound.Length; i++)
+        {
+            StandSpot start = starts[starts.Count - expectedFromTheMound.Length + i];
+            Assert.Equal(expectedFromTheMound[i], start.CellX + "," + start.CellY + "," + start.CellZ);
+            Assert.Equal(start.CellY, start.FeetY, 9);
+        }
+        Assert.Equal(1.5, starts[11].FeetY, 9);   // -2, 1, 2: on the slab
     }
 
     [Fact]

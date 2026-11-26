@@ -38,9 +38,32 @@ public class JumpLimits
     /// </summary>
     public double LedgeClearance = 0.4;
 
-    /// <summary>How many jumps the planner may chain to reach a goal (2 = one intermediate perch).</summary>
+    /// <summary>
+    /// How many jumps the planner may chain to reach a goal (2 = one intermediate perch). 3 or more makes one search
+    /// cost tens of milliseconds (see Config.MaxPlannedJumps).
+    /// </summary>
     public int MaxPlannedJumps = 2;
 
-    /// <summary>Longest allowed flight, in seconds. Also the safety timeout of a jump in the game.</summary>
+    /// <summary>
+    /// Longest allowed flight, in seconds of the natural flight (the game flies it faster, see
+    /// Config.JumpFlightSpeedMultiplier and FlightSchedule).
+    /// </summary>
     public double MaxFlightSeconds = 3;
+
+    /// <summary>A new object with the same values, to change one of them without touching this one.</summary>
+    public JumpLimits Copy()
+    {
+        JumpLimits copy = new JumpLimits();
+        copy.JumpAngleDeg = JumpAngleDeg;
+        copy.MinJumpAngleDeg = MinJumpAngleDeg;
+        copy.MaxJumpAngleDeg = MaxJumpAngleDeg;
+        copy.MaxJumpSpeed = MaxJumpSpeed;
+        copy.MaxJumpUp = MaxJumpUp;
+        copy.MaxJumpDown = MaxJumpDown;
+        copy.MaxJumpHorizontal = MaxJumpHorizontal;
+        copy.LedgeClearance = LedgeClearance;
+        copy.MaxPlannedJumps = MaxPlannedJumps;
+        copy.MaxFlightSeconds = MaxFlightSeconds;
+        return copy;
+    }
 }

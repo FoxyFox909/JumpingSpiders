@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Vintagestory.API.Common;
 using Vintagestory.API.MathTools;
@@ -79,6 +80,51 @@ public static class TreeTrunks
                     trunk.Height = CountHeight(blockAccessor, x, y, z, maxHeight, pos);
                     trunks.Add(trunk);
                     break;
+                }
+            }
+        }
+        return trunks;
+    }
+
+    /// <summary>
+    /// Every trunk whose column centre is within radius blocks (horizontally) of (x, z), nearest first. Searches each
+    /// chunk column the circle touches with FindInChunk and skips the ones that are not loaded.
+    /// </summary>
+    public static List<TrunkColumn> FindNear(IBlockAccessor blockAccessor, double x, double z, double radius, int maxHeight)
+    {
+        List<TrunkColumn> trunks = new List<TrunkColumn>();
+        List<double> distances = new List<double>();
+        int minChunkX = (int)Math.Floor((x - radius) / ChunkSize);
+        int maxChunkX = (int)Math.Floor((x + radius) / ChunkSize);
+        int minChunkZ = (int)Math.Floor((z - radius) / ChunkSize);
+        int maxChunkZ = (int)Math.Floor((z + radius) / ChunkSize);
+        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++)
+        {
+            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++)
+            {
+                IMapChunk mapChunk = blockAccessor.GetMapChunk(chunkX, chunkZ);
+                if (mapChunk == null)
+                {
+                    continue;
+                }
+                List<TrunkColumn> inChunk = FindInChunk(blockAccessor, mapChunk, chunkX, chunkZ, maxHeight);
+                for (int i = 0; i < inChunk.Count; i++)
+                {
+                    double dx = inChunk[i].X + 0.5 - x;
+                    double dz = inChunk[i].Z + 0.5 - z;
+                    double distance = Math.Sqrt(dx * dx + dz * dz);
+                    if (distance > radius)
+                    {
+                        continue;
+                    }
+                    // Insert in order of distance (the lists are short).
+                    int index = 0;
+                    while (index < distances.Count && distances[index] <= distance)
+                    {
+                        index++;
+                    }
+                    distances.Insert(index, distance);
+                    trunks.Insert(index, inChunk[i]);
                 }
             }
         }

@@ -11,7 +11,7 @@ namespace JumpingSpiders;
 /// How it works, for one tree:
 /// 1. FindGroundStarts: the cells around the trunk where a spider stands on the ground. The caller keeps a few.
 /// 2. MarkReachable: for each hammock spot, pretend the hammock is already there (JumpWorldWithExtraBox adds its
-///    thin floor) and try one jump from each ground start.
+///    collision box, the slab it is stood on) and try one jump from each ground start.
 /// 3. For the spots still unreached, FindPerches collects, once per tree rather than once per spot, the higher spots
 ///    the spider can jump up to from a ground start that are within one jump of one of those spots; then one jump
 ///    from each perch is tried.
@@ -31,7 +31,8 @@ public static class HammockReachFinder
     /// <summary>
     /// Ground spots around a trunk: for every column whose distance from the trunk column is 1..radius blocks
     /// (on the larger axis), the highest cell between baseY + searchUp and baseY - searchDown that the spider can
-    /// stand in. baseY is the trunk's lowest block, which sits on the ground, so flat ground gives cells at baseY.
+    /// stand in (StandSpotScan.FirstInColumn). baseY is the trunk's lowest block, which sits on the ground, so flat
+    /// ground gives cells at baseY.
     /// </summary>
     public static List<StandSpot> FindGroundStarts(IJumpWorld world, int trunkX, int baseY, int trunkZ,
         int radius, int searchUp, int searchDown)
@@ -45,16 +46,10 @@ public static class HammockReachFinder
                 {
                     continue;
                 }
-                int x = trunkX + dx;
-                int z = trunkZ + dz;
-                for (int y = baseY + searchUp; y >= baseY - searchDown; y--)
+                StandSpot start = StandSpotScan.FirstInColumn(world, trunkX + dx, trunkZ + dz, baseY, searchUp, searchDown, false);
+                if (start != null)
                 {
-                    if (!world.CanStandAt(x, y, z))
-                    {
-                        continue;
-                    }
-                    starts.Add(MakeSpot(world, x, y, z));
-                    break;
+                    starts.Add(start);
                 }
             }
         }
@@ -64,24 +59,18 @@ public static class HammockReachFinder
     /// <summary>Up to count spots taken at random from spots (the list itself is not changed).</summary>
     public static List<StandSpot> PickSome(List<StandSpot> spots, int count, Random rand)
     {
-        List<StandSpot> copy = new List<StandSpot>(spots);
-        for (int i = copy.Count - 1; i > 0; i--)
+        int[] order = RandomOrder.Shuffled(spots.Count, rand);
+        List<StandSpot> some = new List<StandSpot>();
+        for (int i = 0; i < order.Length && some.Count < count; i++)
         {
-            int j = rand.Next(i + 1);
-            StandSpot temp = copy[i];
-            copy[i] = copy[j];
-            copy[j] = temp;
+            some.Add(spots[order[i]]);
         }
-        if (copy.Count > count)
-        {
-            copy.RemoveRange(count, copy.Count - count);
-        }
-        return copy;
+        return some;
     }
 
     /// <summary>
     /// Sets Reachable and Jumps on every candidate. floorBox is the hammock's collision box relative to its cell
-    /// corner (its thin floor), spiderBox the spider's collision box relative to its feet.
+    /// corner (the slab a spider stands on; its top is the floor height), spiderBox the spider's collision box relative to its feet.
     /// First every candidate is tried with one jump from a ground start. Only if some are left, and
     /// limits.MaxPlannedJumps is at least 2, are perches searched (FindPerches) and tried; longer routes are never tried.
     /// </summary>
@@ -159,7 +148,7 @@ public static class HammockReachFinder
                     }
                     for (int y = start.CellY + 1; y <= start.CellY + up; y++)
                     {
-                        long key = CellKey(x, y, z);
+                        long key = JumpPlanner.CellKey(x, y, z);
                         if (found.Contains(key) || notStandable.Contains(key))
                         {
                             continue;
@@ -173,7 +162,7 @@ public static class HammockReachFinder
                             notStandable.Add(key);
                             continue;
                         }
-                        StandSpot perch = MakeSpot(world, x, y, z);
+                        StandSpot perch = StandSpotScan.MakeSpot(world, x, y, z);
                         if (perch.FeetY < start.FeetY + MinPerchRise || perch.FeetY - start.FeetY > limits.MaxJumpUp)
                         {
                             continue;
@@ -262,31 +251,10 @@ public static class HammockReachFinder
             spiderBox.X1, spiderBox.Y1, spiderBox.Z1, spiderBox.X2, spiderBox.Y2, spiderBox.Z2);
     }
 
-    private static StandSpot MakeSpot(IJumpWorld world, int x, int y, int z)
-    {
-        StandSpot spot = new StandSpot();
-        spot.CellX = x;
-        spot.CellY = y;
-        spot.CellZ = z;
-        spot.FeetX = x + 0.5;
-        spot.FeetY = world.GetStandHeight(x, y, z);
-        spot.FeetZ = z + 0.5;
-        return spot;
-    }
-
     private static bool WithinHorizontal(double ax, double az, double bx, double bz, double range)
     {
         double dx = ax - bx;
         double dz = az - bz;
         return dx * dx + dz * dz <= range * range;
-    }
-
-    // Packs a block cell into one number for the "seen" sets (21 bits per axis, as in JumpPlanner).
-    private static long CellKey(int x, int y, int z)
-    {
-        long kx = x & 0x1FFFFF;
-        long ky = y & 0x1FFFFF;
-        long kz = z & 0x1FFFFF;
-        return (kx << 42) | (ky << 21) | kz;
     }
 }

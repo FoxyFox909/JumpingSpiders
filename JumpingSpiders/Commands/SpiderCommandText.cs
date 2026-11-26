@@ -74,13 +74,25 @@ public static class SpiderCommandText
         {
             origin = "none";
         }
-        bool kept = DespawnRules.IsKeptByPlayer(generation, SpiderAttributes.GetOrigin(spider), SpiderAttributes.IsMarkedKeptByPlayer(spider));
+        bool kept = SpiderAttributes.IsKept(spider);
         string keptText = "no (may despawn when no player is near)";
         if (kept)
         {
             keptText = "yes (never despawns)";
         }
         text.AppendLine("Kept by a player: " + keptText + "; origin: " + origin + ".");
+
+        int textureIndex = SpiderAttributes.GetTextureIndex(spider);
+        int variantCount = SpiderAttributes.GetTextureVariantCount(spider);
+        if (textureIndex < 0)
+        {
+            text.AppendLine("Texture variant: none set (its type has " + variantCount + " variant(s)).");
+        }
+        else
+        {
+            text.AppendLine("Texture variant: " + textureIndex + " of 0.." + (variantCount - 1)
+                + " (0 = the first texture's base, 1 = its first alternate).");
+        }
 
         if (SpiderAttributes.IsHungry(spider))
         {
@@ -117,6 +129,11 @@ public static class SpiderCommandText
         }
         text.AppendLine(string.Format("Curiosity today: {0:0.00} ({1:0.00} right now); {2}.",
             SpiderAttributes.GetDailyCuriosity(spider), SpiderAttributes.GetCuriosity(spider), stayUp));
+        text.AppendLine(DescribeNaps(api, spider));
+        if (SpiderAttributes.IsAdult(spider) && SpiderAttributes.IsDomesticated(spider))
+        {
+            text.AppendLine(DescribeBuilding(api, spider));
+        }
 
         BlockPos home = SpiderAttributes.GetHomeHammock(spider);
         if (home == null)
@@ -147,6 +164,79 @@ public static class SpiderCommandText
         text.Append(string.Format("Breeding saturation: {0:0.0} portions (from real meals: {1:0.0}).",
             SpiderAttributes.GetBreedingSaturation(spider), SpiderAttributes.GetCreditedSaturation(spider)));
         return text.ToString();
+    }
+
+    /// <summary>
+    /// The daytime nap facts: the chance per slot (from today's curiosity), when today's slots start, whether this slot
+    /// was rolled already, and whether it is napping now. Reading them rolls today's values if nothing has yet.
+    /// </summary>
+    public static string DescribeNaps(ICoreServerAPI api, Entity spider)
+    {
+        JumpingSpidersConfig config = JumpingSpidersModSystem.Config;
+        IGameCalendar calendar = api.World.Calendar;
+        int day;
+        int slot = SpiderAttributes.GetNapSlot(spider, out day);
+        double shift = SpiderAttributes.GetNapShiftHours(spider);
+        string rolled = "not yet";
+        if (SpiderAttributes.HasRolledNap(spider, day, slot))
+        {
+            rolled = "already";
+        }
+        string napping = "no";
+        if (SpiderAttributes.IsNapping(spider))
+        {
+            napping = string.Format("yes, until {0} (in {1:0} in-game minutes)",
+                ShowHour(NapSchedule.HourOfDay(SpiderAttributes.GetNapUntilHours(spider), calendar.HoursPerDay)),
+                (SpiderAttributes.GetNapUntilHours(spider) - calendar.TotalHours) * 60);
+        }
+        return string.Format("Nap chance per {0:0.#}-hour slot today: {1:0.0} % (by day only; in a hammock if it can get to one, else on the spot). Today's slots start at {2} and every {0:0.#} h; this slot (from {3}) rolled: {4}. Napping: {5}.",
+            config.NapSlotHours, SpiderAttributes.GetNapChance(spider) * 100, ShowHour(shift),
+            ShowHour(NapSchedule.SlotStartHour(slot, shift, config.NapSlotHours)), rolled, napping);
+    }
+
+    /// <summary>The hammock building facts of a domesticated adult: owed or not, sated, when the next attempt may come.</summary>
+    public static string DescribeBuilding(ICoreServerAPI api, Entity spider)
+    {
+        JumpingSpidersConfig config = JumpingSpidersModSystem.Config;
+        bool armed = SpiderAttributes.IsHammockBuildArmed(spider);
+        bool sated = !SpiderAttributes.IsHungry(spider);
+        double now = api.World.Calendar.TotalHours;
+        double next = SpiderAttributes.GetNextBuildAttemptHours(spider);
+        string when;
+        if (!armed)
+        {
+            when = "owes no hammock (the next kill earns one)";
+        }
+        else if (!sated)
+        {
+            when = "owes a hammock, but tries only while sated";
+        }
+        else if (HammockBuildSchedule.IsAttemptDue(armed, sated, now, next, config.HammockBuildIntervalHours))
+        {
+            when = "owes a hammock; an attempt is due now";
+        }
+        else
+        {
+            when = string.Format("owes a hammock; next attempt in {0:0} in-game minutes", (next - now) * 60);
+        }
+        string last = "";
+        AiTaskSpiderBuildHammock task = SpiderCommands.FindBuildTask(spider);
+        if (task != null && task.LastOutcome.Length > 0)
+        {
+            last = " Last attempt: " + task.LastOutcome + ".";
+        }
+        return "Hammock building: " + when + "." + last;
+    }
+
+    // An hour of the day as hh:mm.
+    private static string ShowHour(double hourOfDay)
+    {
+        int minutes = (int)Math.Floor(hourOfDay * 60 + 0.5);
+        if (minutes < 0)
+        {
+            minutes = minutes + 24 * 60;
+        }
+        return string.Format("{0:00}:{1:00}", (minutes / 60) % 24, minutes % 60);
     }
 
     /// <summary>The spider chunk facts about the chunk column containing pos, and the nearest spider chunks.</summary>
@@ -208,6 +298,25 @@ public static class SpiderCommandText
         }
 
         text.Append(DescribeNearestSpiderChunks(api, pos, chunkX, chunkZ));
+        return text.ToString();
+    }
+
+    /// <summary>
+    /// For /jspider spawn: the natural rules that would have stopped a natural spawn in this chunk and were skipped
+    /// (SpawnResult.BypassedRules), one per line.
+    /// </summary>
+    public static string DescribeBypassedRules(SpawnResult result)
+    {
+        if (result.BypassedRules.Count == 0)
+        {
+            return "Bypassed: nothing; a natural spawn could happen in this chunk (the distance to players is not checked here).";
+        }
+        StringBuilder text = new StringBuilder();
+        text.Append("Bypassed, so a natural spawn would not happen in this chunk:");
+        for (int i = 0; i < result.BypassedRules.Count; i++)
+        {
+            text.Append("\n  - " + result.BypassedRules[i]);
+        }
         return text.ToString();
     }
 

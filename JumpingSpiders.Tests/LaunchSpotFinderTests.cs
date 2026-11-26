@@ -76,4 +76,71 @@ public class LaunchSpotFinderTests
         Assert.NotNull(spot);
         Assert.False(spot.CellX == 5 && spot.CellY == 1 && spot.CellZ == -2);
     }
+
+    // Terraced ground (steps of one block every two blocks, rising and falling in threes) with a pillar whose top is
+    // out of reach of two jumps from everywhere.
+    private static TestBlockWorld TerracedWorldWithUnreachableGoal()
+    {
+        TestBlockWorld world = new TestBlockWorld();
+        for (int x = -16; x <= 16; x++)
+        {
+            int height = ((x + 16) / 2) % 3;
+            world.Fill(x, 0, -16, x, height, 16);
+        }
+        world.Fill(8, 1, 0, 8, 9, 0);   // standing on it means feet in cell (8, 10, 0), 8 above the highest terrace
+        return world;
+    }
+
+    [Fact]
+    public void SharingJumpsToTheGoalGivesTheSameAnswers()
+    {
+        TestBlockWorld world = PillarWorld();
+        Dictionary<long, JumpStep> shared = new Dictionary<long, JumpStep>();
+        for (int x = -2; x <= 12; x++)
+        {
+            for (int z = -6; z <= 6; z += 3)
+            {
+                List<JumpStep> alone = JumpPlanner.PlanJumps(world, x + 0.5, 1, z + 0.5, 8, 8, 0, new JumpLimits(),
+                    new Random(x));
+                List<JumpStep> withShared = JumpPlanner.PlanJumps(world, x + 0.5, 1, z + 0.5, 8, 8, 0, new JumpLimits(),
+                    new Random(x), shared);
+                Assert.True((alone == null) == (withShared == null), "start " + x + ", " + z);
+            }
+        }
+        Assert.NotEmpty(shared);
+    }
+
+    [Fact]
+    public void FindsTheSameSpotsAsBeforeTheSharedScan()
+    {
+        // The spots LaunchSpotFinder found here before it used StandSpotScan.InRing.
+        TestBlockWorld world = PillarWorld();
+        JumpPlanNode fromFarAway = LaunchSpotFinder.Find(world, -9.5, 1, 0.5, 8, 8, 0, new JumpLimits(), 6, 1, 4, 4, new Random(1));
+        Assert.Equal(4, fromFarAway.CellX);
+        Assert.Equal(1, fromFarAway.CellY);
+        Assert.Equal(0, fromFarAway.CellZ);
+        Assert.Equal(4.5, fromFarAway.FeetX, 9);
+        Assert.Equal(1.0, fromFarAway.FeetY, 9);
+        Assert.Equal(0.5, fromFarAway.FeetZ, 9);
+        Assert.True(fromFarAway.AtCellCentre);
+        JumpPlanNode fromNearby = LaunchSpotFinder.Find(world, 5.5, 1, -1.5, 8, 8, 0, new JumpLimits(), 6, 1, 4, 12, new Random(1));
+        Assert.Equal(6, fromNearby.CellX);
+        Assert.Equal(1, fromNearby.CellY);
+        Assert.Equal(-2, fromNearby.CellZ);
+    }
+
+    [Fact]
+    public void CheckNextDoesOneSearchAtATime()
+    {
+        TestBlockWorld world = TerracedWorldWithUnreachableGoal();
+        LaunchSpotFinder finder = new LaunchSpotFinder(world, -9.5, 1, 0.5, 8, 10, 0, new JumpLimits(), 6, 1, 8, 3);
+        Random rand = new Random(1);
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.False(finder.IsDone());
+            finder.CheckNext(rand);
+        }
+        Assert.True(finder.IsDone());
+        Assert.Null(finder.Found);
+    }
 }

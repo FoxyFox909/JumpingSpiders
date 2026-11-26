@@ -1,17 +1,19 @@
 using System;
 using System.Collections.Generic;
 using Vintagestory.API.Common;
+using Vintagestory.API.Datastructures;
 
 namespace JumpingSpiders;
 
 /// <summary>
 /// Carries out a plan of one or more jumps from JumpPlanner: for each jump an optional wind-up (facing the jump
 /// direction), then the flight through a JumpController, then a short pause on the perch before the next jump.
-/// Every task that jumps owns one runner; this is the code the four tasks share for "do the jumps I planned".
+/// Every task that jumps owns one runner; this is the code the five tasks share for "do the jumps I planned".
 ///
-/// The task fills the settings (from its JSON), calls Start(plan), then Tick(dt) from every ContinueExecute while
-/// IsBusy(), and Stop() from FinishExecute. Afterwards State says how it went: Reached (at the goal) or Failed
-/// (LastEndReason says why). It never re-plans by itself: the task decides what to do next.
+/// The task fills the settings (ReadSettings reads them from its JSON entry), calls Start(plan), then Tick(dt) from
+/// every ContinueExecute while IsBusy(), and Stop() from FinishExecute. Afterwards State says how it went: Reached (at the goal) or Failed
+/// (LastEndReason says why; Landed there means the spider was no longer standing on its perch, near where the next
+/// jump starts, when that jump was due). It never re-plans by itself: the task decides what to do next.
 /// Server side only.
 /// </summary>
 public class JumpRunner
@@ -79,14 +81,23 @@ public class JumpRunner
         return State == JumpRunState.Flying;
     }
 
-    /// <summary>The jump being done now (or last done), or null.</summary>
-    public JumpStep CurrentStep()
+    /// <summary>
+    /// Reads the settings from a task's JSON entry, with the defaults the entity JSON writes out: the wind-up before
+    /// each jump, the pause on a perch, the turning speed during the wind-up and the two animations. Tasks whose jumps
+    /// have no wind-up (attack, flee) set those fields themselves instead.
+    /// </summary>
+    public void ReadSettings(JsonObject taskConfig)
     {
-        if (plan == null || plan.Count == 0)
-        {
-            return null;
-        }
-        return plan[Math.Min(stepIndex, plan.Count - 1)];
+        // Milliseconds: the crouch before each jump, a random time between these two (0 and 0 = none).
+        WindUpMinSeconds = taskConfig["windUpMinMs"].AsInt(350) / 1000f;
+        WindUpMaxSeconds = taskConfig["windUpMaxMs"].AsInt(900) / 1000f;
+        // Milliseconds: rest on an intermediate perch before the next jump of a plan.
+        PauseSeconds = taskConfig["pauseBetweenJumpsMs"].AsInt(300) / 1000f;
+        // Degrees per second: how fast it turns towards the jump direction during the crouch.
+        TurnSpeedRadPerSec = taskConfig["turnSpeedDegPerSec"].AsFloat(360) * (float)Math.PI / 180f;
+        // Animation codes from the entity JSON; "" = none.
+        WindUpAnimation = SpiderTaskUtil.ReadAnimation(taskConfig, "windUpAnimation", "jumpwindup");
+        JumpAnimation = SpiderTaskUtil.ReadAnimation(taskConfig, "jumpAnimation", "jump");
     }
 
     /// <summary>Starts the plan. An empty plan means "already there": State becomes Reached at once.</summary>
@@ -128,7 +139,8 @@ public class JumpRunner
             }
             SpiderTaskUtil.StopAnimation(entity, JumpAnimation);
             LastEndReason = Controller.EndReason;
-            if (LastEndReason != JumpEndReason.Landed || !IsNearLandingPoint(plan[stepIndex]))
+            JumpStep landed = plan[stepIndex];
+            if (LastEndReason != JumpEndReason.Landed || !IsNear(landed.ToX, landed.ToY, landed.ToZ))
             {
                 State = JumpRunState.Failed;
                 return;
@@ -151,6 +163,14 @@ public class JumpRunner
             pauseLeft -= dt;
             if (pauseLeft <= 0)
             {
+                // The next jump was planned from this perch: if something pushed the spider off it meanwhile, or it
+                // is not standing, that jump would start from the wrong place. The task plans again instead.
+                JumpStep next = plan[stepIndex];
+                if (!entity.OnGround || !IsNear(next.FromX, next.FromY, next.FromZ))
+                {
+                    State = JumpRunState.Failed;
+                    return;
+                }
                 BeginStep();
             }
         }
@@ -189,11 +209,12 @@ public class JumpRunner
         State = JumpRunState.Flying;
     }
 
-    private bool IsNearLandingPoint(JumpStep step)
+    // True when the feet are within LandingToleranceBlocks of the point, sideways and up/down.
+    private bool IsNear(double x, double y, double z)
     {
-        double dx = entity.Pos.X - step.ToX;
-        double dz = entity.Pos.Z - step.ToZ;
-        double dy = entity.Pos.Y - step.ToY;
+        double dx = entity.Pos.X - x;
+        double dz = entity.Pos.Z - z;
+        double dy = entity.Pos.Y - y;
         return dx * dx + dz * dz <= LandingToleranceBlocks * LandingToleranceBlocks
             && Math.Abs(dy) <= LandingToleranceBlocks;
     }

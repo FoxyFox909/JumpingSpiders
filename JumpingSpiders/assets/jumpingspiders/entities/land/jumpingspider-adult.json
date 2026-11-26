@@ -16,20 +16,14 @@
 		{ code: "age", states: ["adult"] },
 		{ code: "gender", states: ["male", "female"] }
 	],
-	// Collision and selection box in blocks. Must fit in one block cell next to a wall so the spider can rest in a
-	// hammock: at most 0.95 wide and about 0.8 tall. The model may be larger than this.
-	// "ByType" picks a value per variant: the key is matched against the entity code, "*" is the fallback.
-	// The male has its real model, about 0.4 blocks tall. The female still uses the placeholder box model.
-	hitboxSizeByType: {
-		"*-male": { x: 0.8, y: 0.4 },
-		"*": { x: 0.8, y: 0.6 }
-	},
+	// Collision and selection box in blocks. Must fit inside a hammock's cell: at most 0.95 wide, and at most
+	// 0.4375 tall, because a spider sleeping in a wall or ceiling hammock stands 9/16 above the bottom of the cell and
+	// the block above a ceiling hammock is solid. The model may be larger than this.
+	// Both sexes share the adult model, about 0.4 blocks tall.
+	hitboxSize: { x: 0.8, y: 0.4 },
 	deadHitboxSize: { x: 0.8, y: 0.3 },
 	// Height of the eyes above the feet, used for line-of-sight checks. Must be inside the hitbox.
-	eyeHeightByType: {
-		"*-male": 0.3,
-		"*": 0.45
-	},
+	eyeHeight: 0.3,
 	// 0 = no fall damage at all (jumps go up to 6 blocks down). This also lets the vanilla pathfinder plan drops.
 	fallDamageMultiplier: 0,
 	// The jump model was measured with default physics: do not add attributes.physics here.
@@ -53,13 +47,19 @@
 	},
 	client: {
 		renderer: "Shape",
-		shape: { base: "jumpingspiders:entity/land/jumpingspider/{gender}" },
-		// "skin" is the texture code used in the shape files. Placeholder: a vanilla hare texture.
-		// "null" is the code VS Model Creator writes on faces that have no texture yet ("#null"), which is every
-		// face of the male model for now. Remove that line once the model has its own texture.
+		// The adult model, used by both sexes. The file keeps the name male.json because the author's VS Model Creator
+		// project uses it. The female's smaller parts are done by the "jumpingspiders.spider" behavior below.
+		shape: { base: "jumpingspiders:entity/land/jumpingspider/male" },
+		// Keys are the texture codes the shape file uses on its faces. VS Model Creator names a code after its file:
+		// the model was painted on textures/male.png, so its faces use "#male". Both sexes use the same textures.
+		//
+		// Texture variants: each spider is drawn with "base" or one of the "alternates" (same UV layout), picked at
+		// random by the server when the spider first enters the world and saved with it (the "textureIndex"
+		// attribute: 0 = base, 1 = the first alternate, ...). The game counts the variants on the FIRST texture in
+		// this list only, so "male" must stay first. To add a variant, add a file with the same layout to alternates.
+		// The files keep the names male.png and male2.png because the author's editor project uses them.
 		textures: {
-			"skin": { base: "game:entity/animal/mammal/hare/european-{gender}1" },
-			"null": { base: "game:entity/animal/mammal/hare/european-{gender}1" }
+			"male": { base: "jumpingspiders:male", alternates: [ { base: "jumpingspiders:male2" } ] }
 		},
 		behaviors: [
 			{ code: "repulseagents" },
@@ -67,8 +67,36 @@
 			{ code: "interpolateposition" },
 			{ code: "floatupwhenstuck", onlyWhenDead: true },
 			{ code: "harvestable" },
-			// Our behavior on the client only shows the info text (wild/domesticated, hungry/sated, asleep).
-			{ code: "jumpingspiders.spider" }
+			// Our behavior on the client shows the info text (wild/domesticated, hungry/sated, asleep) and draws the
+			// sexes differently from the one shared model.
+			{
+				code: "jumpingspiders.spider",
+				// Model elements drawn at a different size or shape than modelled, per sex: element name (exactly as
+				// in the model editor) to either
+				// - one number, a uniform scale (1 = as modelled, 0.5 = half size): the element shrinks toward its
+				//   rotation origin (the joint it turns around), its child elements and its keyframe offsets shrink
+				//   with it; or
+				// - [x, y, z], one factor per axis of the element's own box: the X, Y and Z of the element's Size in
+				//   the model editor, whatever the element's rotation. The box shrinks toward its rotation origin on
+				//   each axis. Only this element changes: its children keep their size and stay attached at their
+				//   joints, so list each child you want changed too, in its own axes.
+				// The animations still move every listed element. A name the model does not have is reported as a
+				// warning in the client log. The server never draws the model and does not need this.
+				elementScalesByType: {
+					// The female's pedipalps are thinner than the male's and just as long. In both parts of each
+					// pedipalp, X is the length (PedipalpL/R 2.1, PedipalpLB/RB 1.5 in the editor) and Y and Z are the
+					// thickness (0.8 x 0.8 and 0.7 x 0.6). So [1, 0.6, 0.6] keeps the length and makes them 0.6 as
+					// thick. The 0.6s are placeholder values: tune them by looking at the spider in game.
+					"*-female": {
+						"PedipalpL": [1, 0.6, 0.6],
+						"PedipalpLB": [1, 0.6, 0.6],
+						"PedipalpR": [1, 0.6, 0.6],
+						"PedipalpRB": [1, 0.6, 0.6]
+					},
+					// The male is drawn as modelled.
+					"*": {}
+				}
+			}
 			// "health" is not listed here: the game copies the server's health entry to the client by itself.
 		],
 		// Animation metas. "code" is what the game and the AI tasks ask for; "animation" is the animation code in the
@@ -77,7 +105,11 @@
 			{ code: "idle", animation: "idle", blendMode: "AddAverage", easeOutSpeed: 4, triggeredBy: { defaultAnim: true } },
 			{ code: "walk", animation: "walk" },
 			{ code: "run", animation: "run" },
-			{ code: "jumpwindup", animation: "jumpwindup", easeInSpeed: 6, easeOutSpeed: 6, blendMode: "Average" },
+			// The game plays 30 animation frames per second times animationSpeed. The male's wind-up is 30 frames and
+			// holds its last frame, so at 4 the front legs are up after 0.25 s and stay up for the rest of the wind-up
+			// (the tasks' windUpMinMs..windUpMaxMs: 350 to 900 ms, so even the shortest wind-up shows the full raise).
+			// At 1 the raise would take a full second.
+			{ code: "jumpwindup", animation: "jumpwindup", animationSpeed: 4, easeInSpeed: 6, easeOutSpeed: 6, blendMode: "Average" },
 			{ code: "jump", animation: "jump", blendMode: "Average" },
 			{ code: "sleep", animation: "sleep", easeInSpeed: 4, easeOutSpeed: 4, blendMode: "Average" },
 			{ code: "hurt", animation: "hurt", animationSpeed: 2, weight: 10, blendMode: "AddAverage" },
@@ -89,12 +121,16 @@
 			{ code: "repulseagents" },
 			{ code: "controlledphysics", stepHeight: 1.1251 },
 			// Wild spiders despawn after minSeconds (real seconds) without any player within minPlayerDistance (blocks).
+			// 96 is deliberately more than Config.SpawnMaxPlayerDistance (80): wild spiders spawn up to that far from a
+			// player, and with a smaller value here most of them would start this timer the moment they appear.
 			// No belowLightLevel: unlike vanilla animals, wild spiders also despawn in daylight.
 			// Spiders the player caught, placed, bred or fed never despawn: EntityBehaviorJumpingSpider switches this
 			// timer off for them.
-			{ code: "despawn", minPlayerDistance: 32, minSeconds: 600 },
+			{ code: "despawn", minPlayerDistance: 96, minSeconds: 600 },
 			{ code: "health", currenthealth: 8, maxhealth: 8 },
-			{ code: "deaddecay", hoursToDecay: 96, decayedBlock: "game:carcass-small" },
+			// A dead spider disappears when it has been harvested, or after hoursToDecay in-game hours. No "decayedBlock":
+			// with one (vanilla animals use "carcass-tiny" and the like) a bone pile block would be left behind.
+			{ code: "deaddecay", hoursToDecay: 96 },
 			{ code: "floatupwhenstuck", onlyWhenDead: true },
 			{
 				code: "harvestable",
@@ -143,10 +179,13 @@
 				// Keep this list sorted by descending priority. Every AI tick the game walks it in this order and starts
 				// the first task that wants to run; a later task can take over from a running one only when its priority is
 				// strictly higher than the running task's priorityForCancel.
-				// The jumpingspiders.* tasks are explained in their C# files (AiTasks folder). Every key they read is
-				// written out below with the code's default, so all of them can be tuned here. Times are in milliseconds
-				// (ms), distances in blocks. Animation codes refer to "animations" above; "" = none. The physical jump
-				// ability (how high and far a jump goes) is in ModConfig/jumpingspiders.json instead.
+				// The jumpingspiders.* tasks are explained in their C# files (AiTasks folder). Every key that matters
+				// for them is written out below, so all of them can be tuned here. A task listed once has the code's
+				// defaults. The two listed twice differ between their entries: the code's defaults are the values of the
+				// hunting jumpattack and of the jumpflee from players, except that switches such as onlyWhenHungry are
+				// off by default. Times are in milliseconds (ms), distances in blocks. Animation codes refer to
+				// "animations" above; "" = none. The physical jump ability (how high and far a jump goes) is in
+				// ModConfig/jumpingspiders.json instead.
 				aitasks: [
 					{
 						// Attack a player while angry ("aggressiveondamage": a wild spider that was hit, or whose hammock
@@ -158,12 +197,11 @@
 						// Only whoever caused the anger (the player who hit it or broke its hammock), never a bystander.
 						targetEmotionSource: true,
 						onlyWhenHungry: false,
-						tamingGenerations: 1000,
 						seekingRange: 10,
 						loseTargetRange: 20,
 						pounceRange: 5,
-						windUpMinMs: 500,
-						windUpMaxMs: 1250,
+						windUpMinMs: 350,
+						windUpMaxMs: 900,
 						leadFactor: 0.5,
 						hitReach: 0.4,
 						damage: 2,
@@ -260,8 +298,8 @@
 						maxLaunchSpotPlanChecks: 8,
 						maxTravelAttempts: 3,
 						travelTimeoutMs: 30000,
-						windUpMinMs: 200,
-						windUpMaxMs: 400,
+						windUpMinMs: 350,
+						windUpMaxMs: 900,
 						pauseBetweenJumpsMs: 300,
 						turnSpeedDegPerSec: 360,
 						leaveJumpRadius: 4,
@@ -286,12 +324,11 @@
 						onlyWhenHungry: true,
 						sameSexRivalsOnly: true,
 						retaliateAttacks: false,
-						tamingGenerations: 1000,
 						seekingRange: 10,
 						loseTargetRange: 16,
 						pounceRange: 5,
-						windUpMinMs: 500,
-						windUpMaxMs: 1250,
+						windUpMinMs: 350,
+						windUpMaxMs: 900,
 						leadFactor: 0.5,
 						hitReach: 0.4,
 						damage: 3,
@@ -330,6 +367,43 @@
 						animationSpeed: 2
 					},
 					{
+						// Domesticated adults (minGeneration 1) build hammocks: a kill owes one, and while sated the
+						// spider makes one attempt per in-game hour (Config.HammockBuildIntervalHours) until one succeeds.
+						// An attempt picks a random spot near the spider, fails if another hammock is too close, and
+						// otherwise gets within reach (Config.HammockBuildRange) by jumping, walking, or jumping at the wall
+						// or ceiling and holding on there while it builds, then sidles or crawls (blocks per second, blocks)
+						// the last bit onto its spot. See AiTaskSpiderBuildHammock.
+						// Priority 1.35: just above exploring (1.3), below getting out of water, the bait eat task, hunting,
+						// sleeping and fleeing, so it never pre-empts those.
+						code: "jumpingspiders.buildhammock",
+						priority: 1.35,
+						minGeneration: 1,
+						checkIntervalMs: 2000,
+						pickTriesPerTick: 40,
+						pickMaxTries: 400,
+						maxPlanSearches: 2,
+						clingChecksPerTick: 4,
+						maxClingChecks: 24,
+						maxLaunchSpotChecks: 12,
+						launchSpotSearchRadius: 3,
+						maxWalks: 2,
+						maxApproachRounds: 5,
+						approachTimeoutMs: 20000,
+						buildTimeMs: 1500,
+						sidleSpeed: 1.5,
+						maxSidleDistance: 0.8,
+						maxCrawlDistance: 1.0,
+						movespeed: 0.02,
+						windUpMinMs: 350,
+						windUpMaxMs: 900,
+						pauseBetweenJumpsMs: 300,
+						turnSpeedDegPerSec: 360,
+						windUpAnimation: "jumpwindup",
+						jumpAnimation: "jump",
+						walkAnimation: "walk",
+						buildAnimation: ""
+					},
+					{
 						// Domesticated spiders (minGeneration 1) hop around curiously, liking high spots. How often and how
 						// many hops depends on the daily curiosity roll (lower at night); see AiTaskSpiderExplore.
 						code: "jumpingspiders.explore",
@@ -344,8 +418,8 @@
 						territoryRadius: 12,
 						pauseMinMs: 800,
 						pauseMaxMs: 3000,
-						windUpMinMs: 250,
-						windUpMaxMs: 600,
+						windUpMinMs: 350,
+						windUpMaxMs: 900,
 						turnSpeedDegPerSec: 360,
 						// Rest after an outing (ms).
 						mincooldown: 8000,

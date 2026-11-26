@@ -1,40 +1,81 @@
 {
 	// The silk hammock jumping spiders sleep in. C# side: Hammock/BlockSilkHammock.cs and Hammock/BlockEntitySilkHammock.cs.
 	//
-	// Variants are named by the direction from the hammock to the block that holds it:
-	//   silkhammock-north / -east / -south / -west   on a wall or tree trunk on that side (shape silkhammock-wall)
-	//   silkhammock-up                               hanging under a ceiling or branch      (shape silkhammock-ceiling)
-	//   silkhammock-down                             lying on the ground or a block          (shape silkhammock-floor)
-	// The C# code reads the direction from the "side" variant group and builds codes as "silkhammock-<side>", so keep
-	// "side" the only variant group (or update BlockSilkHammock.GetVariant when adding one).
+	// Variants are named by the direction from the hammock to the block that holds it, and for ceiling and floor
+	// hammocks by the direction their opening faces:
+	//   silkhammock-north / -east / -south / -west   on a wall or tree trunk on that side; opens away from it
+	//   silkhammock-up, -up-north, -up-east, -up-south            hanging under a ceiling or branch
+	//   silkhammock-down, -down-north, -down-east, -down-south    lying on the ground or a block
+	// Plain "up" and "down" open west: they are the original two variants, and placed hammocks in existing worlds are
+	// stored under those codes, so they keep them; only the three other openings got new states. "up-north" is one
+	// state of the one "side" group (a hyphen inside a state is fine), so no existing code changed.
+	// Careful with wildcards in the *ByType lists below: "*-north" also matches silkhammock-up-north and
+	// silkhammock-down-north, and the game uses the first key that matches, so the up-/down- keys come first.
+	// All twelve use the one model, shapes/block/silkhammock-wall.json, turned per variant (see shapeByType).
+	// The C# code reads the support and the opening from the "side" state (BlockSilkHammock.ReadSideState) and builds
+	// codes with BlockSilkHammock.SideState, so keep "side" the only variant group (or update both when adding one).
 	code: "silkhammock",
 	class: "jumpingspiders.BlockSilkHammock",
 	entityClass: "jumpingspiders.SilkHammock",
 	variantgroups: [
-		{ code: "side", states: ["north", "east", "south", "west", "up", "down"] }
+		{ code: "side", states: ["north", "east", "south", "west", "up", "down", "up-north", "up-east", "up-south", "down-north", "down-east", "down-south"] }
 	],
 	attributes: {
 		// Breaking with shears is this many times faster than by hand or with any other tool (BlockSilkHammock.OnGettingBroken).
-		shearsBreakSpeedMultiplier: 5
+		shearsBreakSpeedMultiplier: 5,
+		// Blocks above the bottom of the cell: where a sleeping spider's feet are (BlockSilkHammock.GetSleepFeetHeight).
+		// Walls and ceiling: 9/16 of a block. That is a little above the cradle's inner bottom (y 7.2 of the model, 0.45
+		// blocks) on purpose: the gap is room for the spider's legs, which would poke through the silk otherwise. Floor: on the base (y 1 of the model, turned
+		// upside down). Where this is above the collision box's top (the ceiling), the spider is lifted up here as it
+		// falls asleep; see collisionboxByType below.
+		sleepFeetHeightByType: {
+			"*-down": 0.0625,
+			"*-down-*": 0.0625,
+			"*": 0.5625
+		}
 	},
-	// Only the floor variant appears in the creative inventory; placing it picks the variant from the clicked face.
+	// Only the original floor variant appears in the creative inventory; placing it picks the variant from the clicked
+	// face (and, on a floor or under a ceiling, from where the player stands). "*-down" matches no other variant.
 	creativeinventory: { "general": ["*-down"] },
 	drawtype: "JSON",
-	// The wall model is drawn against the SOUTH side of its cell; rotateY turns it to face the other walls
-	// (the same convention as vanilla's side mushrooms).
+	// The model, in its own frame (1/16 block units): a roof slab at the top of the cell (y 15..16), a back panel
+	// against the EAST side (x 15..16), and between them a V-shaped cradle running along X whose inner bottom is at
+	// y 9. The opening faces WEST (-X), and a sleeping spider looks out through it.
+	// rotateY/rotateX turn the whole model around the centre of the cell (ShapeTesselator in the game client).
+	// rotateY 90 takes east to north (+X to -Z), so the back panel ends up against the supporting wall:
+	//   east 0, north 90, west 180, south 270; the opening points away from the wall.
+	// Ceiling: upright, the roof slab under the support, turned like the wall variant whose wall is opposite the
+	// opening: opening west 0, south 90, east 180, north 270.
+	// Floor: rotateX 180 turns it upside down (y and z flip, x stays), so the roof slab becomes a base on the ground
+	// and the cradle a tent over it. A rotation, not a mirror, so the faces stay the right way out. Vanilla does the
+	// same for ceiling coatings (saltpeter-u). The game turns around Y first and around X after (MeshData.Rotate uses
+	// Mat4f.RotateXYZ), and the flip around X swaps north and south, so for the floor: opening west 0, north 90,
+	// east 180, south 270. Logic/HammockOpening.ModelRotateY holds the same table (with a unit test).
+	// BlockSilkHammock.GetSleepYaw must agree with these: it turns a sleeping spider to face the opening.
 	shapeByType: {
-		"*-north": { base: "jumpingspiders:block/silkhammock-wall", rotateY: 180 },
-		"*-east": { base: "jumpingspiders:block/silkhammock-wall", rotateY: 90 },
-		"*-south": { base: "jumpingspiders:block/silkhammock-wall", rotateY: 0 },
-		"*-west": { base: "jumpingspiders:block/silkhammock-wall", rotateY: 270 },
-		"*-up": { base: "jumpingspiders:block/silkhammock-ceiling" },
-		"*-down": { base: "jumpingspiders:block/silkhammock-floor" }
+		"*-up-north": { base: "jumpingspiders:block/silkhammock-wall", rotateY: 270 },
+		"*-up-east": { base: "jumpingspiders:block/silkhammock-wall", rotateY: 180 },
+		"*-up-south": { base: "jumpingspiders:block/silkhammock-wall", rotateY: 90 },
+		"*-down-north": { base: "jumpingspiders:block/silkhammock-wall", rotateX: 180, rotateY: 90 },
+		"*-down-east": { base: "jumpingspiders:block/silkhammock-wall", rotateX: 180, rotateY: 180 },
+		"*-down-south": { base: "jumpingspiders:block/silkhammock-wall", rotateX: 180, rotateY: 270 },
+		"*-north": { base: "jumpingspiders:block/silkhammock-wall", rotateY: 90 },
+		"*-east": { base: "jumpingspiders:block/silkhammock-wall", rotateY: 0 },
+		"*-south": { base: "jumpingspiders:block/silkhammock-wall", rotateY: 270 },
+		"*-west": { base: "jumpingspiders:block/silkhammock-wall", rotateY: 180 },
+		"*-up": { base: "jumpingspiders:block/silkhammock-wall" },
+		"*-down": { base: "jumpingspiders:block/silkhammock-wall", rotateX: 180 }
 	},
-	// Keys are the texture codes used inside the shapes. Placeholders from the vanilla game.
+	// Keys are the texture codes used on the model's faces. VS Model Creator names a texture code after its file:
+	// every face uses "#silk_hammock", which is assets/jumpingspiders/textures/silk_hammock.png. If the file is
+	// renamed or moved, change this to match.
 	textures: {
-		silk: { base: "game:block/cloth/linen/normal1" },
-		strand: { base: "game:block/cloth/reedrope" }
+		"silk_hammock": { base: "jumpingspiders:silk_hammock" }
 	},
+	// How the game draws the block's texture. The default ("Opaque") only cuts out fully transparent pixels and
+	// draws every other pixel solid, whatever its alpha. "Transparent" blends half-transparent pixels with what is
+	// behind them, which the silk texture needs; vanilla's spider web and glass use it too.
+	renderpass: "Transparent",
 	// Cloth: no vanilla tool has a mining speed for it, so only the shears bonus above makes a difference.
 	blockmaterial: "Cloth",
 	// Seconds to break by hand.
@@ -44,21 +85,49 @@
 	// Nothing can be attached to a hammock (and it cannot hold another hammock).
 	sidesolid: { all: false },
 	emitSideAo: { all: false },
-	// The thin floor every variant has at the bottom of its cell, 1/16 block thick, so a spider stands inside the
-	// hammock's cell. Its top is the spider's feet height when sleeping (BlockSilkHammock.GetFloorTop).
-	collisionbox: { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.0625, z2: 1 },
-	selectionboxByType: {
-		"*-up": { x1: 0.0625, y1: 0, z1: 0.0625, x2: 0.9375, y2: 1, z2: 0.9375 },
-		"*-down": { x1: 0.0625, y1: 0, z1: 0.0625, x2: 0.9375, y2: 0.1875, z2: 0.9375 },
-		// Walls: drawn against the south side, rotated like the shape.
-		"*": {
-			x1: 0.0625, y1: 0, z1: 0.25, x2: 0.9375, y2: 0.5625, z2: 1,
-			rotateYByType: { "*-north": 180, "*-east": 90, "*-south": 0, "*-west": 270 }
-		}
+	// What a spider lands on. The jump planner (SpiderJumpWorld) and the game's physics both use these boxes.
+	// Only these boxes collide: the roof, back panel and cradle sides are drawn but can be passed through.
+	// - Walls: a solid slab from the bottom of the cell up to where a spider sleeps (9/16, see sleepFeetHeight), so a spider jumps
+	//   straight into the cradle and sleeps where it lands. Solid all the way down so that nothing can walk in
+	//   under the cradle. The cell above a wall hammock is usually open, so the jump can come in from above; under
+	//   another block it cannot be jumped into (the same 7/16 gap as below), so spiders never build one there
+	//   (HammockBuilder.ChooseBuildFacing skips it) and wild ones get one only where the jump planner finds a way in.
+	// - Ceiling: a thin floor at the bottom of the cell. With the slab, the block holding the hammock would leave
+	//   only 7/16 of head room above it, and no jump arc can enter a gap that low (a 0.4 high spider would have to
+	//   fly in level). So the spider lands on this floor, under the cradle, and the sleep task lifts it into the
+	//   cradle (to sleepFeetHeight) when it falls asleep and holds it there with its physics paused. It is put back
+	//   down on this floor when it wakes, and jumps out from there.
+	// - Floor: the base slab, 1/16 thick.
+	// The four wall variants share one box, so wild hammock placement (on tree trunks, always a wall variant) can
+	// use any wall variant's box (WildHammockSites.EvaluateTrunk). Keep it that way, or make that code read each
+	// candidate's variant.
+	collisionboxByType: {
+		"*-up": { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.0625, z2: 1 },
+		"*-up-*": { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.0625, z2: 1 },
+		"*-down": { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.0625, z2: 1 },
+		"*-down-*": { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.0625, z2: 1 },
+		"*": { x1: 0, y1: 0, z1: 0, x2: 1, y2: 0.5625, z2: 1 }
 	},
-	// What breaking it gives: 2 to 4 flax twine (2: 25 %, 3: 50 %, 4: 25 %).
+	// What the player's cursor hits: the outline of the model, turned like the shape above. In the model's own frame
+	// it spans about x 2..16, y 6..16, z 1..15 (1/16 units). A ceiling hammock's box is that of the wall hammock turned the
+	// same way; a floor hammock's is its upside-down copy (y 0..10).
+	selectionboxByType: {
+		"*-up-north": { x1: 0.0625, y1: 0.375, z1: 0.125, x2: 0.9375, y2: 1, z2: 1 },
+		"*-up-east": { x1: 0, y1: 0.375, z1: 0.0625, x2: 0.875, y2: 1, z2: 0.9375 },
+		"*-up-south": { x1: 0.0625, y1: 0.375, z1: 0, x2: 0.9375, y2: 1, z2: 0.875 },
+		"*-down-north": { x1: 0.0625, y1: 0, z1: 0.125, x2: 0.9375, y2: 0.625, z2: 1 },
+		"*-down-east": { x1: 0, y1: 0, z1: 0.0625, x2: 0.875, y2: 0.625, z2: 0.9375 },
+		"*-down-south": { x1: 0.0625, y1: 0, z1: 0, x2: 0.9375, y2: 0.625, z2: 0.875 },
+		"*-east": { x1: 0.125, y1: 0.375, z1: 0.0625, x2: 1, y2: 1, z2: 0.9375 },
+		"*-north": { x1: 0.0625, y1: 0.375, z1: 0, x2: 0.9375, y2: 1, z2: 0.875 },
+		"*-west": { x1: 0, y1: 0.375, z1: 0.0625, x2: 0.875, y2: 1, z2: 0.9375 },
+		"*-south": { x1: 0.0625, y1: 0.375, z1: 0.125, x2: 0.9375, y2: 1, z2: 1 },
+		"*-up": { x1: 0.125, y1: 0.375, z1: 0.0625, x2: 1, y2: 1, z2: 0.9375 },
+		"*-down": { x1: 0.125, y1: 0, z1: 0.0625, x2: 1, y2: 0.625, z2: 0.9375 }
+	},
+	// What breaking it gives: 4 to 6 flax twine (4: 25 %, 5: 50 %, 6: 25 %).
 	drops: [
-		{ type: "item", code: "game:flaxtwine", quantity: { avg: 3, var: 1 } }
+		{ type: "item", code: "game:flaxtwine", quantity: { avg: 5, var: 1 } }
 	],
 	sounds: {
 		place: "game:block/cloth",

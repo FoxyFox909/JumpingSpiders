@@ -8,7 +8,9 @@ namespace JumpingSpiders;
 /// - Only a kill of a farm-born chicken or hare counts as a meal: the victim's code must start with one of the
 ///   meal prefixes and its generation must be at least the minimum. Wild prey, raccoons and rival spiders give
 ///   no meal. Babies never get meal credit (they do not breed and do not hunt).
-/// - A meal credits breeding saturation; a meal eaten by a domesticated adult also makes it build a hammock.
+/// - A meal credits breeding saturation.
+/// - A kill by a domesticated adult earns one hammock, which the spider then tries to build once per in-game hour
+///   while sated (AiTaskSpiderBuildHammock). Any kill does, unless Config.HammockNeedsFarmPrey asks for a meal.
 ///
 /// EntityBehaviorJumpingSpider.OnKilledEntity calls these with values read from the game and the config.
 /// </summary>
@@ -50,9 +52,20 @@ public static class MealRules
         return IsMealPrey(victimCodePath, mealPrefixes);
     }
 
-    /// <summary>True when the spider should try to build a hammock after this kill.</summary>
-    public static bool ShouldBuildHammock(bool wasValidMeal, bool hunterIsAdult, bool hunterIsDomesticated)
+    /// <summary>
+    /// True when this kill earns the spider a hammock to build: the hunter is a domesticated adult and, only when
+    /// needsFarmPrey is set, the kill was a valid meal (a farm-born chicken or hare).
+    /// </summary>
+    public static bool ShouldBuildHammock(bool wasValidMeal, bool hunterIsAdult, bool hunterIsDomesticated, bool needsFarmPrey)
     {
-        return wasValidMeal && hunterIsAdult && hunterIsDomesticated;
+        if (!hunterIsAdult || !hunterIsDomesticated)
+        {
+            return false;
+        }
+        if (needsFarmPrey && !wasValidMeal)
+        {
+            return false;
+        }
+        return true;
     }
 }

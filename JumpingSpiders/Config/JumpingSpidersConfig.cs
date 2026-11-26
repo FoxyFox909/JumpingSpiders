@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace JumpingSpiders;
 
 /// <summary>
@@ -13,6 +15,15 @@ namespace JumpingSpiders;
 /// </summary>
 public class JumpingSpidersConfig
 {
+    // ---------------- Debugging ----------------
+
+    /// <summary>
+    /// true: every spider writes what it decides and why (each jump, hunt, flee, bedtime, nap and build attempt) to the
+    /// server's debug log (Logs/server-debug.log), and so does wild spawning. Switch it on when reporting a problem.
+    /// false (default): none of that is written, or even put together. /jspider replies are not affected.
+    /// </summary>
+    public bool DebugLogging = false;
+
     // ---------------- Taming, hunger, meals ----------------
 
     /// <summary>
@@ -64,11 +75,27 @@ public class JumpingSpidersConfig
     /// <summary>When jumping up, how far above the landing height the arc must peak, in blocks.</summary>
     public double JumpLedgeClearance = 0.4;
 
-    /// <summary>How many jumps the planner may chain (2 = one intermediate perch).</summary>
+    /// <summary>
+    /// How many jumps the planner may chain (2 = one intermediate perch). Each extra jump multiplies the work of one
+    /// search: with 2 a search costs at most a few milliseconds, with 3 or more tens of milliseconds (about 40 ms
+    /// measured for a goal that cannot be reached, which is when a search does the most), so keep it at 2.
+    /// </summary>
     public int MaxPlannedJumps = 2;
 
-    /// <summary>Safety timeout of one jump in the game, and the longest flight the solver plans, in seconds.</summary>
+    /// <summary>
+    /// The longest flight the solver plans, in seconds of the natural flight (at JumpFlightSpeedMultiplier 1).
+    /// The game also gives up a flight after this time divided by JumpFlightSpeedMultiplier (a safety timeout).
+    /// </summary>
     public double MaxFlightSeconds = 3;
+
+    /// <summary>
+    /// How many times as fast as the game's own gravity would carry it a spider flies through the air. Every jump
+    /// (attack, flee, exploring, going to a hammock) follows the same arc and lands on the same spot whatever this is;
+    /// only the time in the air changes. 1.45 = the arc is flown 1.45 times as fast, so a jump is over in about 69% of
+    /// the time (0.5 s becomes about 0.35 s). 1 = the natural flight, exactly as the game's physics would fly it.
+    /// The jump limits above (reach, MaxJumpSpeed, MaxFlightSeconds) describe the natural arc and stay as they are.
+    /// </summary>
+    public double JumpFlightSpeedMultiplier = 1.45;
 
     /// <summary>If the spider has not left the ground this many seconds after a launch, the jump is given up.</summary>
     public double JumpLiftoffTimeoutSeconds = 0.3;
@@ -86,10 +113,10 @@ public class JumpingSpidersConfig
 
     /// <summary>
     /// Domesticated spiders stay up after dusk for (today's curiosity roll times this) in-game hours before they go
-    /// to bed: at curiosity 1, 3 hours; at 0.2, 36 minutes. Meanwhile they explore (at the night curiosity) and hunt
-    /// when hungry. 0 = they go to bed at dusk, like wild spiders always do. A spider already asleep stays asleep.
+    /// to bed: at curiosity 1, 1.8 hours; at 0.2, about 22 minutes. Meanwhile they explore (at the night curiosity) and
+    /// hunt when hungry. 0 = they go to bed at dusk, like wild spiders always do. A spider already asleep stays asleep.
     /// </summary>
-    public double CuriosityStayUpHoursMax = 3;
+    public double CuriosityStayUpHoursMax = 1.8;
 
     /// <summary>
     /// Staying up after dusk never takes more than this share (0..1) of the night, so on short nights curious
@@ -97,41 +124,83 @@ public class JumpingSpidersConfig
     /// </summary>
     public double CuriosityStayUpMaxNightShare = 0.5;
 
+    // ---------------- Daytime naps ----------------
+
+    /// <summary>
+    /// By day a spider may take a nap in a hammock, or where it stands when it has none it can get to. The day is cut
+    /// into slots this many in-game hours long, shifted per spider by a random 0 to NapSlotHours rolled at the start of
+    /// each in-game day, and the spider rolls for a nap once per slot. Every spider that sleeps at night naps, wild ones
+    /// in their home hammock.
+    /// </summary>
+    public double NapSlotHours = 2;
+
+    /// <summary>
+    /// The chance (0..1) per slot that the least curious spider naps. The chance falls in a straight line with the
+    /// day's curiosity roll c (CuriosityMin..CuriosityMax, without the night factor):
+    /// chance = NapChanceMax * (CuriosityMax - c) / (CuriosityMax - CuriosityMin).
+    /// With the defaults: curiosity 0.2 gives 0.3, 0.6 gives 0.15, 1.0 gives 0. A day has about six slots of daylight,
+    /// so the least curious spiders nap about twice a day, middling ones about once, the most curious never.
+    /// 0 = no naps at all.
+    /// </summary>
+    public double NapChanceMax = 0.3;
+
+    /// <summary>Shortest nap, in in-game minutes, counted from falling asleep (in the hammock or on the spot).</summary>
+    public double NapMinMinutes = 30;
+
+    /// <summary>Longest nap, in in-game minutes. A nap still going at dusk simply goes on as the night's sleep.</summary>
+    public double NapMaxMinutes = 60;
+
     // ---------------- Hammocks ----------------
 
-    /// <summary>At most one hammock per box of this many blocks on each side.</summary>
-    public int HammockSpacing = 4;
-
-    /// <summary>Horizontal radius, in blocks, around the spider in which build sites are sampled.</summary>
-    public int HammockBuildSearchRadius = 8;
+    /// <summary>
+    /// At most one hammock per box of this many blocks on each side, for every hammock whoever placed it: two hammocks
+    /// less than this many blocks apart on every axis at once are too close (see Logic/HammockSpacing.cs).
+    /// A build attempt whose randomly picked spot breaks this rule fails, and the spider tries again an hour later.
+    /// </summary>
+    public int HammockSpacing = 3;
 
     /// <summary>
-    /// How many random block columns around the spider are looked at per build attempt. Every cell of a sampled
-    /// column between HammockBuildSearchDown and HammockBuildSearchUp that can hold a hammock becomes a candidate.
-    /// Cheap (no jump planning). With too few, a lone post or tree beside the spider is often not looked at at all,
-    /// so the spider builds on the floor: 60 missed a post about one time in four, 150 hardly ever.
+    /// false: any kill by a domesticated adult earns it one hammock to build. true: only a valid meal does (a
+    /// farm-born chicken or hare, the same kills that count for breeding).
     /// </summary>
-    public int HammockBuildSamples = 150;
-
-    /// <summary>Highest build site looked at, in blocks above the spider's feet (two jumps of MaxJumpUp reach 8).</summary>
-    public int HammockBuildSearchUp = 8;
-
-    /// <summary>Lowest build site looked at, in blocks below the spider's feet.</summary>
-    public int HammockBuildSearchDown = 3;
+    public bool HammockNeedsFarmPrey = false;
 
     /// <summary>
-    /// How many candidate sites a build attempt checks with the jump planner before giving up. Each check is one
-    /// planner search, the expensive part, so this caps the cost of one attempt. In a walled pen the highest
-    /// candidates (wall tops, the outside of the wall) cannot be reached and use up checks: with 6 checks about one
-    /// build in five failed there, with 20 about one in twenty-five. Measured cost of a whole build attempt with 20:
-    /// 6 ms on average, under 40 ms at worst, once per meal.
+    /// A domesticated adult that earned a hammock with a kill makes one build attempt this many in-game hours apart
+    /// while it is sated, until one succeeds (then none until its next kill). The first comes as soon as it stands
+    /// on the ground after the kill. The time of the next attempt is saved with the spider.
     /// </summary>
-    public int HammockBuildMaxPlanAttempts = 20;
+    public double HammockBuildIntervalHours = 1;
+
+    /// <summary>
+    /// A spider only builds when it is this close to the hammock's cell, in blocks: from the middle of its body to the
+    /// nearest point of the cell, with nothing solid in between. At 0.5 it has to be right against the cell: standing
+    /// on the floor beside a floor or low wall spot, or holding on to the wall or ceiling right next to or under a
+    /// higher spot (it jumps there and holds on while it builds). It gets onto the exact spot with a short sidle or
+    /// crawl (the build task's maxSidleDistance and maxCrawlDistance).
+    /// </summary>
+    public double HammockBuildRange = 0.5;
+
+    /// <summary>
+    /// Horizontal radius, in blocks, around the spider in which a build attempt picks its spot. The spot is picked at
+    /// random among all cells in this cylinder that could hold a hammock, every one equally likely, high or low.
+    /// </summary>
+    public int HammockBuildSearchRadius = 6;
+
+    /// <summary>
+    /// Highest spot picked, in blocks above the spider's feet. From the floor a spider reaches spots up to 4 blocks up
+    /// by holding on to the wall right below them (a jump of MaxJumpUp = 4, plus the reach of HammockBuildRange);
+    /// higher picks only work from a perch, and otherwise just fail (rarely: they are seldom in sight from below).
+    /// </summary>
+    public int HammockBuildSearchUp = 5;
+
+    /// <summary>Lowest spot picked, in blocks below the spider's feet.</summary>
+    public int HammockBuildSearchDown = 2;
 
     /// <summary>
     /// Which supporting block a new hammock uses when a cell has several, best first, as directions from the hammock
     /// to its support: north, east, south, west (walls such as tree trunks), up (hanging under a branch or ceiling),
-    /// down (lying on the ground or a branch). Directions left out are never chosen by HammockBuilder.FindSupportFacing,
+    /// down (lying on the ground or a branch). Directions left out are never chosen by HammockBuilder.ChooseBuildFacing,
     /// which spiders use when they build. A player placing a hammock gets the face they click on, whatever this says.
     /// </summary>
     public string[] HammockSupportPreference = new string[] { "north", "east", "south", "west", "up", "down" };
@@ -141,14 +210,6 @@ public class JumpingSpidersConfig
     /// (a safety net in case a sleep task ends without releasing the hammock).
     /// </summary>
     public double HammockClaimMaxDistance = 32;
-
-    /// <summary>
-    /// Preference for high build sites: weight = (height above the lowest candidate + 1) ^ bias. With 4, a site
-    /// 3 blocks up weighs as much as 256 floor sites, so a few high spots beat a whole floor of low ones; with 2 it was
-    /// only 16, and on open ground beside a post half the hammocks ended up at floor level. Raising it further makes builds in
-    /// walled pens fail more often (the unreachable wall tops get picked first; see HammockBuildMaxPlanAttempts).
-    /// </summary>
-    public double HammockHeightBias = 4.0;
 
     /// <summary>How far, in blocks, a spider looks for a free hammock at night.</summary>
     public double HammockSleepSearchRange = 24;
@@ -166,6 +227,7 @@ public class JumpingSpidersConfig
 
     /// <summary>
     /// Most spider chunks given a spawn attempt per check, over all players together. Bounds the work of one check.
+    /// Chunks still on their cooldown or at their cap are passed over without counting.
     /// </summary>
     public int MaxSpawnAttemptsPerCheck = 2;
 
@@ -250,6 +312,80 @@ public class JumpingSpidersConfig
     /// columns around it (the game counts blocks placed by hand per chunk). Keeps wild spiders out of bases.
     /// </summary>
     public int SpawnMaxPlayerPlacedBlocks = 20;
+
+    /// <summary>
+    /// Corrects, in place, the settings whose value would break the mod: a number that would make the code throw, loop
+    /// or divide by zero (a negative search radius, zero intervals and spacings), a share or chance outside 0..1, or the
+    /// upper end of a range below its lower end. Returns one sentence per corrected setting, for the server log.
+    /// Values that are merely unusual (a huge radius, a small jump) are left alone.
+    /// </summary>
+    public List<string> Validate()
+    {
+        JumpingSpidersConfig defaults = new JumpingSpidersConfig();
+        SettingCorrector fix = new SettingCorrector();
+
+        SatedHoursAfterKill = fix.AtLeast("SatedHoursAfterKill", SatedHoursAfterKill, 0);
+        SaturationPerMeal = (float)fix.AtLeast("SaturationPerMeal", SaturationPerMeal, 0);
+
+        MinJumpAngleDeg = fix.Between("MinJumpAngleDeg", MinJumpAngleDeg, 1, 89);
+        MaxJumpAngleDeg = fix.Between("MaxJumpAngleDeg", MaxJumpAngleDeg, 1, 89);
+        MaxJumpAngleDeg = fix.NotBelow("MaxJumpAngleDeg", MaxJumpAngleDeg, "MinJumpAngleDeg", MinJumpAngleDeg);
+        JumpAngleDeg = fix.Between("JumpAngleDeg", JumpAngleDeg, MinJumpAngleDeg, MaxJumpAngleDeg);
+        MaxJumpSpeed = fix.AboveZero("MaxJumpSpeed", MaxJumpSpeed, defaults.MaxJumpSpeed);
+        MaxJumpUp = fix.AtLeast("MaxJumpUp", MaxJumpUp, 0);
+        MaxJumpDown = fix.AtLeast("MaxJumpDown", MaxJumpDown, 0);
+        MaxJumpHorizontal = fix.AboveZero("MaxJumpHorizontal", MaxJumpHorizontal, defaults.MaxJumpHorizontal);
+        JumpLedgeClearance = fix.AtLeast("JumpLedgeClearance", JumpLedgeClearance, 0);
+        MaxPlannedJumps = fix.AtLeast("MaxPlannedJumps", MaxPlannedJumps, 1);
+        MaxFlightSeconds = fix.AboveZero("MaxFlightSeconds", MaxFlightSeconds, defaults.MaxFlightSeconds);
+        JumpFlightSpeedMultiplier = fix.AboveZero("JumpFlightSpeedMultiplier", JumpFlightSpeedMultiplier, defaults.JumpFlightSpeedMultiplier);
+        JumpLiftoffTimeoutSeconds = fix.AboveZero("JumpLiftoffTimeoutSeconds", JumpLiftoffTimeoutSeconds, defaults.JumpLiftoffTimeoutSeconds);
+
+        CuriosityMin = fix.Between("CuriosityMin", CuriosityMin, 0, 1);
+        CuriosityMax = fix.Between("CuriosityMax", CuriosityMax, 0, 1);
+        CuriosityMax = fix.NotBelow("CuriosityMax", CuriosityMax, "CuriosityMin", CuriosityMin);
+        CuriosityNightMultiplier = fix.AtLeast("CuriosityNightMultiplier", CuriosityNightMultiplier, 0);
+        CuriosityStayUpHoursMax = fix.AtLeast("CuriosityStayUpHoursMax", CuriosityStayUpHoursMax, 0);
+        CuriosityStayUpMaxNightShare = fix.Between("CuriosityStayUpMaxNightShare", CuriosityStayUpMaxNightShare, 0, 1);
+
+        NapSlotHours = fix.AboveZero("NapSlotHours", NapSlotHours, defaults.NapSlotHours);
+        NapChanceMax = fix.Between("NapChanceMax", NapChanceMax, 0, 1);
+        NapMinMinutes = fix.AtLeast("NapMinMinutes", NapMinMinutes, 0);
+        NapMaxMinutes = fix.NotBelow("NapMaxMinutes", NapMaxMinutes, "NapMinMinutes", NapMinMinutes);
+
+        HammockSpacing = fix.AtLeast("HammockSpacing", HammockSpacing, 1);
+        HammockBuildIntervalHours = fix.AboveZero("HammockBuildIntervalHours", HammockBuildIntervalHours, defaults.HammockBuildIntervalHours);
+        HammockBuildRange = fix.AtLeast("HammockBuildRange", HammockBuildRange, 0);
+        HammockBuildSearchRadius = fix.AtLeast("HammockBuildSearchRadius", HammockBuildSearchRadius, 0);
+        // At least one height to pick from: HammockBuildSearchDown below the feet up to HammockBuildSearchUp above.
+        HammockBuildSearchUp = fix.NotBelow("HammockBuildSearchUp", HammockBuildSearchUp, "minus HammockBuildSearchDown", -HammockBuildSearchDown);
+        HammockClaimMaxDistance = fix.AtLeast("HammockClaimMaxDistance", HammockClaimMaxDistance, 0);
+        HammockSleepSearchRange = fix.AtLeast("HammockSleepSearchRange", HammockSleepSearchRange, 0);
+        HomeHammockForgetDistance = fix.AtLeast("HomeHammockForgetDistance", HomeHammockForgetDistance, 0);
+
+        SpiderChunkFraction = fix.Between("SpiderChunkFraction", SpiderChunkFraction, 0, 1);
+        SpawnCheckIntervalSeconds = fix.AboveZero("SpawnCheckIntervalSeconds", SpawnCheckIntervalSeconds, defaults.SpawnCheckIntervalSeconds);
+        MaxSpawnAttemptsPerCheck = fix.AtLeast("MaxSpawnAttemptsPerCheck", MaxSpawnAttemptsPerCheck, 0);
+        MaxWildSpidersPerSpiderChunk = fix.AtLeast("MaxWildSpidersPerSpiderChunk", MaxWildSpidersPerSpiderChunk, 0);
+        SpiderChunkSpawnCooldownHours = fix.AtLeast("SpiderChunkSpawnCooldownHours", SpiderChunkSpawnCooldownHours, 0);
+        WildHammockChance = fix.Between("WildHammockChance", WildHammockChance, 0, 1);
+        WildHammockReuseRange = fix.AtLeast("WildHammockReuseRange", WildHammockReuseRange, 0);
+        WildHammockHeightBias = fix.AtLeast("WildHammockHeightBias", WildHammockHeightBias, 0);
+        WildHammockTreesPerAttempt = fix.AtLeast("WildHammockTreesPerAttempt", WildHammockTreesPerAttempt, 0);
+        WildHammockGroundStarts = fix.AtLeast("WildHammockGroundStarts", WildHammockGroundStarts, 0);
+        WildHammockGroundRadius = fix.AtLeast("WildHammockGroundRadius", WildHammockGroundRadius, 0);
+        WildHammockRetryDays = fix.AtLeast("WildHammockRetryDays", WildHammockRetryDays, 0);
+        SpawnMinPlayerDistance = fix.AtLeast("SpawnMinPlayerDistance", SpawnMinPlayerDistance, 0);
+        SpawnMaxPlayerDistance = fix.NotBelow("SpawnMaxPlayerDistance", SpawnMaxPlayerDistance, "SpawnMinPlayerDistance", SpawnMinPlayerDistance);
+        SpawnMinForest = (float)fix.Between("SpawnMinForest", SpawnMinForest, 0, 1);
+        SpawnMaxTemperature = (float)fix.NotBelow("SpawnMaxTemperature", SpawnMaxTemperature, "SpawnMinTemperature", SpawnMinTemperature);
+        WildHammockMinHeight = fix.AtLeast("WildHammockMinHeight", WildHammockMinHeight, 0);
+        WildHammockMaxHeight = fix.NotBelow("WildHammockMaxHeight", WildHammockMaxHeight, "WildHammockMinHeight", WildHammockMinHeight);
+        WildSpawnRadiusFromHammock = fix.AtLeast("WildSpawnRadiusFromHammock", WildSpawnRadiusFromHammock, 0);
+        SpawnPositionTries = fix.AtLeast("SpawnPositionTries", SpawnPositionTries, 0);
+        SpawnMinKeptSpiderDistance = fix.AtLeast("SpawnMinKeptSpiderDistance", SpawnMinKeptSpiderDistance, 0);
+        return fix.Warnings;
+    }
 
     /// <summary>
     /// The jump fields as a JumpLimits object, the form the jump code in the Logic folder works with.

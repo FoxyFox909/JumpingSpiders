@@ -3,7 +3,8 @@ using System;
 namespace JumpingSpiders;
 
 /// <summary>
-/// The ballistic model of a spider jump, and the solver that turns "I want to land there" into a launch velocity.
+/// The ballistic model of a spider jump, the solver that turns "I want to land there" into a launch velocity, and
+/// the sums JumpController uses to fly the spider along that arc in the game.
 ///
 /// How the game moves a creature (EntityBehaviorControlledPhysics, read from the 1.22.7 source):
 /// - Physics runs in fixed ticks of 1/30 second.
@@ -13,21 +14,23 @@ namespace JumpingSpiders;
 ///   while falling; then air drag multiplies all of motion by 0.983 ^ (33 / 30); then the position moves by motion * 2
 ///   (vertical part first, then horizontal, each stopped by blocks).
 ///
-/// The vertical part of a jump is pure physics: JumpController sets motion.Y once at take-off and the engine does
-/// the rest. The horizontal part is held constant by JumpController, which re-writes the horizontal motion every
-/// AI tick (ComputeSteering; the engine's ground friction would otherwise eat most of it right after take-off).
-/// So in this model the spider moves sideways at a constant speed, and up and down exactly like the engine does.
+/// The arc (the "natural arc") is planned as if the game's own physics flew the whole jump: the vertical part
+/// exactly as gravity and drag would move it, the horizontal part at a constant speed. Checked on a real 1.22.7
+/// server: the game's physics follows this model to 0.00001 blocks per tick. Game version 1.23.0-pre.2 gives the same
+/// numbers for gravity, drag and ground friction; the one difference is that it leaves a creature standing on a block
+/// 0.0001 blocks above it (see ReachTolerance). The model assumes default physics:
+/// the entity JSON must not change gravityFactor, airDragFallingFactor or groundDragFactor (attributes.physics).
 ///
-/// Checked on a real 1.22.7 server (a vanilla hare launched through JumpController, physics logged per tick):
-/// the height matched this model to 0.00001 blocks on every tick, and the spider stayed within 0.0001 blocks of
-/// the planned arc and landed on the planned tick. The model assumes default physics: the entity JSON must not
-/// change gravityFactor, airDragFallingFactor or groundDragFactor (attributes.physics).
+/// In the game the spider flies that same arc faster (Config.JumpFlightSpeedMultiplier): FlightSchedule says where
+/// on the arc it must be at the end of every physics tick, and JumpController writes, after every physics tick, the
+/// motion that makes the next tick end there (ComputeDriveMotion). The game's physics still does the moving, so
+/// blocks still stop the spider. Reach, landing points and the planner's collision checks are those of the arc.
 ///
 /// Everything here is pure C# so the unit tests can check it without the game.
 /// </summary>
 public static class JumpMath
 {
-    // ---- Engine constants (Vintage Story 1.22.7). These are not design knobs: they must match the game. ----
+    // ---- Engine constants (Vintage Story 1.22.7, unchanged in 1.23.0-pre.2). Not design knobs: they must match the game. ----
 
     /// <summary>Length of one server physics tick, seconds (PhysicsManager: tickInterval = 1/30).</summary>
     public const double PhysicsTickSeconds = 1.0 / 30.0;
@@ -58,11 +61,19 @@ public static class JumpMath
     /// <summary>When the preferred angle cannot reach the target, try angles this many degrees apart.</summary>
     public const double AngleSearchStepDeg = 5.0;
 
-    /// <summary>How many halvings the speed search does. 50 is far more precise than needed and still cheap.</summary>
-    public const int SpeedSearchIterations = 50;
+    /// <summary>
+    /// How many halvings the speed search does: 25 leave the launch speed within 18 / 2^25 (about 5e-7) blocks per
+    /// second. Checked against 50: every solved jump of the unit tests' grid keeps its landing tick, and lands within
+    /// 2e-9 blocks of its target both in the engine simulator and on a 1.22.7 server, the same as with 50.
+    /// </summary>
+    public const int SpeedSearchIterations = 25;
 
-    /// <summary>JumpController makes up a lag behind the planned arc over this many physics ticks (see ComputeSteering).</summary>
-    public const int SteeringCatchUpTicks = 2;
+    /// <summary>
+    /// How far (blocks) JumpController may move the spider sideways in one physics tick beyond the planned move, to
+    /// catch up when something pushed it off the arc. Normally the spider is within 0.001 blocks of the plan and this
+    /// never matters; it stops a knocked-away spider from dashing back in one jerk.
+    /// </summary>
+    public const double MaxCatchUpBlocksPerTick = 0.25;
 
     /// <summary>
     /// For how many physics ticks after take-off the engine still applies ground friction: PModuleOnGround keeps
@@ -83,6 +94,14 @@ public static class JumpMath
     public const double LimitTolerance = 1e-6;
 
     /// <summary>
+    /// Slack (blocks) on how far a jump may reach: MaxJumpHorizontal, MaxJumpUp and MaxJumpDown. Game version 1.23 leaves
+    /// a creature that stands on a block 0.0001 blocks above it (1.22.7 put it exactly on top), so a drop of exactly
+    /// MaxJumpDown, measured from the spider's real feet, is 0.0001 too long. This slack lets that jump through; nobody
+    /// could see a jump that much longer.
+    /// </summary>
+    public const double ReachTolerance = 0.001;
+
+    /// <summary>
     /// One physics tick of vertical motion: gravity, then air drag, exactly as PModuleGravity and PModuleMotionDrag do it.
     /// Takes and returns motion units (blocks per 1/60 s).
     /// </summary>
@@ -100,7 +119,6 @@ public static class JumpMath
     /// <summary>
     /// The horizontal motion value that moves the spider the given distance (blocks) in one physics tick.
     /// Air drag is applied to the motion before the move, so this is a little more than distance / 2.
-    /// JumpController writes this every AI tick to keep the spider on the planned arc.
     /// </summary>
     public static double HorizontalMotionForOneTick(double distance)
     {
@@ -108,94 +126,151 @@ public static class JumpMath
     }
 
     /// <summary>
-    /// How many physics ticks have passed since take-off, judged from the spider's current vertical motion
-    /// (motion units). Gravity lowers the vertical motion by a fixed pattern every tick, so it works as a clock
-    /// that is always in step with the physics, however the AI ticks and physics ticks interleave.
-    /// Returns a value from 0 to maxTicks.
+    /// The inverse of one physics tick of vertical motion: the motion.Y (motion units) to write before a physics
+    /// tick so that, after the engine's gravity and air drag, the tick moves the spider up by distance blocks
+    /// (negative = down). JumpController writes this after every physics tick of a flight.
     /// </summary>
-    public static int EstimateTicksSinceLaunch(JumpStep step, double motionY, int maxTicks)
+    public static double VerticalMotionForMove(double distance)
     {
-        double m = step.VY / BlocksPerSecondPerMotionUnit;
-        if (motionY >= m)
+        // What must be left after gravity, so that drag and the move give the distance.
+        double afterGravity = distance / (PositionPerMotionPerTick * DragPerTick);
+        double motion = afterGravity + GravityPerSecond * PhysicsTickSeconds;
+        if (motion < 0)
         {
-            return 0;
+            // Falling: the engine also pulls by FallingExtraGravityFactor times the downward motion.
+            motion = motion / (1 + FallingExtraGravityFactor * PhysicsTickSeconds);
         }
-        for (int tick = 1; tick <= maxTicks; tick++)
-        {
-            double previous = m;
-            m = StepVerticalMotion(m);
-            if (m <= motionY)
-            {
-                // motionY lies between tick-1 and tick: take the nearer one.
-                if (previous - motionY < motionY - m)
-                {
-                    return tick - 1;
-                }
-                return tick;
-            }
-        }
-        return maxTicks;
+        return motion;
     }
 
     /// <summary>
-    /// The steering rule of JumpController: the horizontal motion to write now so that the spider follows the
-    /// planned arc. The vertical motion serves as the clock (see EstimateTicksSinceLaunch), so the rule always knows
-    /// where on the arc the spider should be, however the AI ticks and physics ticks interleave.
-    ///
-    /// Each tick the spider gets the planned per-tick distance, plus a share of how far it lags behind the plan.
-    /// The game's ground friction keeps acting for 0.15 s after take-off ("coyote time", GroundFrictionTicksAfterTakeOff
-    /// ticks); during those ticks the command is raised to make up for it (GroundFrictionPerTick) and any lag is made
-    /// up at once. Afterwards a lag is made up over SteeringCatchUpTicks ticks (or fewer, near the landing), because a busy server can run two
-    /// physics ticks with the same command, and catching up fully in one tick would then overshoot and oscillate. After the planned landing tick the rule holds the spider
-    /// above the landing point. maxSpeed (blocks per second) caps the catching up.
+    /// Height of the natural arc above the take-off point (blocks) after the given number of physics ticks of the
+    /// natural flight. Fractions of a tick are interpolated in a straight line, as the engine moves in one go per
+    /// tick. Past the landing tick the arc simply goes on down, as if there were no floor.
     /// </summary>
-    public static void ComputeSteering(JumpStep step, double currentX, double currentZ, double currentMotionY, double maxSpeed,
-        out double motionX, out double motionZ)
+    public static double RelativeHeightAtTicks(JumpStep step, double ticks)
     {
-        int ticksDone = EstimateTicksSinceLaunch(step, currentMotionY, step.FlightTicks);
-
-        double dx;
-        double dz;
-        double planX;
-        double planY;
-        double planZ;
-        if (ticksDone >= step.FlightTicks)
+        if (ticks <= 0)
         {
-            dx = step.ToX - currentX;
-            dz = step.ToZ - currentZ;
+            return 0;
         }
-        else
+        int wholeTicks = (int)Math.Floor(ticks);
+        double fraction = ticks - wholeTicks;
+        double m = step.VY / BlocksPerSecondPerMotionUnit;
+        double y = 0;
+        for (int tick = 1; tick <= wholeTicks; tick++)
         {
-            PositionAt(step, ticksDone * PhysicsTickSeconds, out planX, out planY, out planZ);
-            double lagX = planX - currentX;
-            double lagZ = planZ - currentZ;
-            // While the ground friction still brakes the spider, make up the lag at once, or it keeps growing.
-            int catchUpTicks = SteeringCatchUpTicks;
-            if (ticksDone < GroundFrictionTicksAfterTakeOff)
-            {
-                catchUpTicks = 1;
-            }
-            catchUpTicks = Math.Min(catchUpTicks, step.FlightTicks - ticksDone);
-            dx = step.VX * PhysicsTickSeconds + lagX / catchUpTicks;
-            dz = step.VZ * PhysicsTickSeconds + lagZ / catchUpTicks;
+            m = StepVerticalMotion(m);
+            y = y + m * PositionPerMotionPerTick;
         }
+        if (fraction <= 0)
+        {
+            return y;
+        }
+        m = StepVerticalMotion(m);
+        return y + m * PositionPerMotionPerTick * fraction;
+    }
 
+    /// <summary>
+    /// The vertical motion (motion units) the game's own physics would give the spider at this point of the natural
+    /// flight (counted in natural physics ticks). JumpController hands the spider back to the game's physics with it
+    /// when a flight is cut short, so that it drops the way an unhurried jump would.
+    /// </summary>
+    public static double NaturalMotionYAtTicks(JumpStep step, double ticks)
+    {
+        double m = step.VY / BlocksPerSecondPerMotionUnit;
+        int wholeTicks = (int)Math.Floor(Math.Max(0, ticks));
+        for (int tick = 1; tick <= wholeTicks; tick++)
+        {
+            m = StepVerticalMotion(m);
+        }
+        return m;
+    }
+
+    /// <summary>
+    /// The driving rule of JumpController: the motion to write after physics tick number ticksDone of a flight
+    /// (0 = at launch) so that the next physics tick ends where the schedule says, starting from where the spider
+    /// really is. Any lag (from the engine's friction, a push) is made up in that one tick, by at most
+    /// MaxCatchUpBlocksPerTick beyond the planned move.
+    ///
+    /// The game's ground friction keeps acting for 0.15 s after take-off ("coyote time", see
+    /// GroundFrictionTicksAfterTakeOff); groundFrictionNextTick says it will act in the next tick (see
+    /// NextTickHasGroundFriction), and the horizontal motion is then raised to make up for it (GroundFrictionPerTick).
+    /// Call only while ticksDone is less than schedule.Ticks.
+    /// </summary>
+    public static void ComputeDriveMotion(FlightSchedule schedule, int ticksDone, bool groundFrictionNextTick,
+        double currentX, double currentY, double currentZ, out double motionX, out double motionY, out double motionZ)
+    {
+        double targetX;
+        double targetY;
+        double targetZ;
+        schedule.TargetAfterTick(ticksDone + 1, out targetX, out targetY, out targetZ);
+        double previousX;
+        double previousY;
+        double previousZ;
+        schedule.TargetAfterTick(ticksDone, out previousX, out previousY, out previousZ);
+
+        double dx = targetX - currentX;
+        double dz = targetZ - currentZ;
         double length = Math.Sqrt(dx * dx + dz * dz);
-        double maxPerTick = maxSpeed * PhysicsTickSeconds;
-        if (length > maxPerTick && length > 0)
+        double plannedX = targetX - previousX;
+        double plannedZ = targetZ - previousZ;
+        double maxLength = Math.Sqrt(plannedX * plannedX + plannedZ * plannedZ) + MaxCatchUpBlocksPerTick;
+        if (length > maxLength && length > 0)
         {
-            dx = dx * maxPerTick / length;
-            dz = dz * maxPerTick / length;
+            dx = dx * maxLength / length;
+            dz = dz * maxLength / length;
         }
 
         // The next tick still gets the ground friction: ask for more so that what is left is what we want.
-        if (ticksDone < GroundFrictionTicksAfterTakeOff)
+        if (groundFrictionNextTick)
         {
             dx = dx / GroundFrictionPerTick;
             dz = dz / GroundFrictionPerTick;
         }
         motionX = HorizontalMotionForOneTick(dx);
         motionZ = HorizontalMotionForOneTick(dz);
+        motionY = VerticalMotionForMove(targetY - currentY);
+    }
+
+    /// <summary>
+    /// The horizontal motion that moves the spider towards (targetX, targetZ) in one physics tick, by at most
+    /// maxPerTick blocks. JumpController uses it after the planned landing tick when the spider has not touched down
+    /// yet (the block it aimed for was removed, say): it keeps the spider above the landing point while it falls.
+    /// </summary>
+    public static void ComputeHoldMotion(double targetX, double targetZ, double currentX, double currentZ, double maxPerTick,
+        out double motionX, out double motionZ)
+    {
+        double dx = targetX - currentX;
+        double dz = targetZ - currentZ;
+        double length = Math.Sqrt(dx * dx + dz * dz);
+        if (length > maxPerTick && length > 0)
+        {
+            dx = dx * maxPerTick / length;
+            dz = dz * maxPerTick / length;
+        }
+        motionX = HorizontalMotionForOneTick(dx);
+        motionZ = HorizontalMotionForOneTick(dz);
+    }
+
+    /// <summary>
+    /// Keeps count of the engine's ground friction (PModuleOnGround) for JumpController: call once before each
+    /// physics tick, with whether the spider is on the ground now. Returns true when the friction will act in that
+    /// tick. frictionTicksLeft is the count carried from call to call (start it at 0): standing on the ground
+    /// restarts the 0.15 s of coyote time, which then lasts GroundFrictionTicksAfterTakeOff ticks.
+    /// </summary>
+    public static bool NextTickHasGroundFriction(bool onGroundNow, ref int frictionTicksLeft)
+    {
+        if (onGroundNow)
+        {
+            frictionTicksLeft = GroundFrictionTicksAfterTakeOff;
+        }
+        if (frictionTicksLeft > 0)
+        {
+            frictionTicksLeft--;
+            return true;
+        }
+        return false;
     }
 
     /// <summary>The number of physics ticks a flight of the given length may take at most.</summary>
@@ -210,6 +285,10 @@ public static class JumpMath
     /// the From and To positions (or use CreateJump, which does both).
     /// Returns false when the target is out of reach: beyond MaxJumpUp, MaxJumpDown or MaxJumpHorizontal,
     /// too fast for MaxJumpSpeed at every allowed angle, longer than MaxFlightSeconds, or straight up.
+    ///
+    /// Only the unit tests call this (and CreateJump and PositionAt): they are the reference model the tests check the
+    /// planner and the engine simulator against. The mod plans through JumpPlanner.TryJump, which walks the same
+    /// angles itself so that it can check each arc against the blocks.
     ///
     /// How it works: it first tries the preferred launch angle, then angles further and further away from it,
     /// within MinJumpAngleDeg..MaxJumpAngleDeg. For one angle it searches the launch speed at which the arc comes
@@ -273,15 +352,15 @@ public static class JumpMath
         {
             return false;
         }
-        if (distance > limits.MaxJumpHorizontal + LimitTolerance)
+        if (distance > limits.MaxJumpHorizontal + ReachTolerance)
         {
             return false;
         }
-        if (dy > limits.MaxJumpUp + LimitTolerance)
+        if (dy > limits.MaxJumpUp + ReachTolerance)
         {
             return false;
         }
-        if (-dy > limits.MaxJumpDown + LimitTolerance)
+        if (-dy > limits.MaxJumpDown + ReachTolerance)
         {
             return false;
         }
@@ -291,6 +370,7 @@ public static class JumpMath
 
     /// <summary>
     /// Convenience wrapper around SolveLaunch: a complete JumpStep between two feet positions, or null when out of reach.
+    /// Only the unit tests use it.
     /// </summary>
     public static JumpStep CreateJump(double fromX, double fromY, double fromZ, double toX, double toY, double toZ, JumpLimits limits)
     {
@@ -311,7 +391,8 @@ public static class JumpMath
     /// <summary>
     /// Feet position of the spider t seconds after take-off, following the model. Between physics ticks the
     /// position is interpolated in a straight line, as the engine moves it in one go per tick. During the last
-    /// tick the spider does not go below the landing height (the landing surface stops it).
+    /// tick the spider does not go below the landing height (the landing surface stops it). Only the unit tests use
+    /// it (FlightSchedule and JumpController follow the arc tick by tick instead).
     /// </summary>
     public static void PositionAt(JumpStep step, double t, out double x, out double y, out double z)
     {
@@ -332,19 +413,7 @@ public static class JumpMath
 
         double ticks = t / PhysicsTickSeconds;
         int wholeTicks = (int)Math.Floor(ticks);
-        double fraction = ticks - wholeTicks;
-
-        // Run the vertical tick loop up to the tick after t.
-        double m = step.VY / BlocksPerSecondPerMotionUnit;
-        double yBefore = 0;
-        for (int tick = 1; tick <= wholeTicks; tick++)
-        {
-            m = StepVerticalMotion(m);
-            yBefore = yBefore + m * PositionPerMotionPerTick;
-        }
-        m = StepVerticalMotion(m);
-        double yAfter = yBefore + m * PositionPerMotionPerTick;
-        double relativeY = yBefore + (yAfter - yBefore) * fraction;
+        double relativeY = RelativeHeightAtTicks(step, ticks);
 
         double landingRelativeY = step.ToY - step.FromY;
         if (wholeTicks + 1 >= step.FlightTicks && relativeY < landingRelativeY)

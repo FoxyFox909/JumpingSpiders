@@ -6,7 +6,7 @@ namespace JumpingSpiders;
 ///
 /// Why: before a spider builds a hammock, HammockBuilder must know whether the spider could jump into it. The cell
 /// is still empty air at that point, so the real world says "nothing to stand on there". Wrapping the world with
-/// the hammock's thin floor lets JumpPlanner plan as if the hammock already existed, without touching the world.
+/// the hammock's collision box (the slab a spider stands on) lets JumpPlanner plan as if the hammock already existed, without touching the world.
 ///
 /// The box is given relative to the cell's corner, in blocks (0..1 on each axis), and must stay inside its cell.
 /// The spider's collision box is given relative to its feet, the same way the game's entity CollisionBox is.

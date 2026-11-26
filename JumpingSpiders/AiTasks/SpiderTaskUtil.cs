@@ -8,8 +8,9 @@ using Vintagestory.GameContent;
 namespace JumpingSpiders;
 
 /// <summary>
-/// Small helpers that all four spider AI tasks use: turning to face a point, stopping the walking AI, finding who
-/// caused an emotion state, playing animations, reading the jump ability from the config, and debug logging.
+/// Small helpers that the five spider AI tasks (and JumpController) use: turning to face a point, stopping the walking
+/// AI, holding the spider still, finding who caused an emotion state, playing animations, reading the jump ability from
+/// the config, and debug logging.
 /// Static methods only; server side only.
 ///
 /// Vintage Story concepts used here:
@@ -30,9 +31,6 @@ public static class SpiderTaskUtil
     /// </summary>
     public const float InFlightPriorityForCancel = 9f;
 
-    /// <summary>TurnTowards reports "facing it" once the remaining angle is below this, in radians (about 9 degrees).</summary>
-    public const float FacingToleranceRad = 0.15f;
-
     /// <summary>A copy of the spider's physical jump ability from the config, for the planner.</summary>
     public static JumpLimits CreateLimits()
     {
@@ -49,11 +47,8 @@ public static class SpiderTaskUtil
         return (minMs + (float)rand.NextDouble() * (maxMs - minMs)) / 1000f;
     }
 
-    /// <summary>
-    /// Turns the spider towards the point (x, z), at most radPerSecond * dt this tick.
-    /// Returns true when it is now facing the point (within FacingToleranceRad).
-    /// </summary>
-    public static bool TurnTowards(EntityAgent entity, double x, double z, float radPerSecond, float dt)
+    /// <summary>Turns the spider towards the point (x, z), at most radPerSecond * dt this tick.</summary>
+    public static void TurnTowards(EntityAgent entity, double x, double z, float radPerSecond, float dt)
     {
         float desiredYaw = (float)Math.Atan2(x - entity.Pos.X, z - entity.Pos.Z);
         float remaining = GameMath.AngleRadDistance(entity.Pos.Yaw, desiredYaw);
@@ -61,7 +56,6 @@ public static class SpiderTaskUtil
         float turn = GameMath.Clamp(remaining, -maxTurn, maxTurn);
         entity.Pos.Yaw = GameMath.Mod(entity.Pos.Yaw + turn, GameMath.TWOPI);
         entity.BodyYaw = entity.Pos.Yaw;
-        return Math.Abs(remaining - turn) < FacingToleranceRad;
     }
 
     /// <summary>Stops any walking the AI is doing, so the spider stands still (or flies without being steered).</summary>
@@ -73,6 +67,29 @@ public static class SpiderTaskUtil
             taskAi.PathTraverser.Stop();
         }
         entity.Controls.WalkVector.Set(0, 0, 0);
+    }
+
+    /// <summary>
+    /// Pauses (true) or resumes (false) the spider's physics, and stops its motion. While paused, the game applies no
+    /// gravity or motion to it, so it stays exactly where it is although nothing holds it up: a spider lifted into a
+    /// ceiling hammock's cradle (the sleep task), or one holding on to a wall or ceiling while it builds a hammock.
+    /// This is how vanilla's entity mover tool holds a creature (EnableModulesApplication of the controlled physics).
+    /// </summary>
+    public static void SetPhysicsPaused(EntityAgent entity, bool paused)
+    {
+        EntityBehaviorControlledPhysics physics = entity.GetBehavior<EntityBehaviorControlledPhysics>();
+        if (physics != null)
+        {
+            physics.EnableModulesApplication = !paused;
+        }
+        entity.Pos.Motion.Set(0, 0, 0);
+    }
+
+    /// <summary>True while SetPhysicsPaused(entity, true) holds the spider still.</summary>
+    public static bool IsPhysicsPaused(EntityAgent entity)
+    {
+        EntityBehaviorControlledPhysics physics = entity.GetBehavior<EntityBehaviorControlledPhysics>();
+        return physics != null && !physics.EnableModulesApplication;
     }
 
     /// <summary>
@@ -164,11 +181,24 @@ public static class SpiderTaskUtil
     }
 
     /// <summary>
+    /// True when Config.DebugLogging is on. Every debug log line of the mod is written only then; call sites test this
+    /// first, so that with it off (the default) they do not even build the text.
+    /// </summary>
+    public static bool IsDebugLogOn()
+    {
+        return JumpingSpidersModSystem.Config.DebugLogging;
+    }
+
+    /// <summary>
     /// Writes one line to the server's debug log (Logs/server-debug.log), prefixed with the mod and the spider, so
-    /// the author can follow what a spider decided and why.
+    /// the author can follow what a spider decided and why. Only with Config.DebugLogging on (see IsDebugLogOn).
     /// </summary>
     public static void Log(EntityAgent entity, string taskName, string message)
     {
+        if (!IsDebugLogOn())
+        {
+            return;
+        }
         entity.World.Logger.Debug("[jumpingspiders] {0} {1}: {2}", taskName, entity.EntityId, message);
     }
 

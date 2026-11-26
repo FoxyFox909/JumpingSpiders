@@ -4,6 +4,7 @@ using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
 using Vintagestory.API.Config;
 using Vintagestory.API.Datastructures;
+using Vintagestory.API.MathTools;
 using Vintagestory.GameContent;
 
 namespace JumpingSpiders;
@@ -28,7 +29,9 @@ namespace JumpingSpiders;
 ///    speed (leadFactor) for the flight time. If no single jump reaches it any more, the attack ends without a jump.
 ///    If the target is already within biting reach, the spider bites without jumping.
 /// 4. "Damage on landing": during the flight and on landing, the first moment the spider's box comes within hitReach
-///    of the target's box it bites once. If the prey stepped aside the spider lands in the empty spot: a miss.
+///    of the target's box it bites once. The flight is checked at every physics tick and halfway between them
+///    (JumpController.FlightPath), as the spider moves up to about 0.9 blocks per tick. If the prey stepped aside the
+///    spider lands in the empty spot: a miss.
 /// Every ending goes through FinishExecute, which starts the cooldown (vanilla mincooldown/maxcooldown, ms).
 /// The kill itself is credited by the spider's own behavior through the game's death event.
 /// </summary>
@@ -62,22 +65,21 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
     private readonly int searchIntervalMs;
     private readonly float turnSpeedRadPerSec;
     private readonly string windUpAnimation;
-    private readonly string walkAnimation;
 
     // ---- State of the current attack ----
 
-    /// <summary>What the attack is doing now (read by debug tools).</summary>
+    /// <summary>What the attack is doing now.</summary>
     public AttackPhase Phase = AttackPhase.None;
 
     private readonly WindUp windUp;
     private readonly JumpRunner runner;
+    private readonly Walker walker;
     private long nextSearchMs;
     private long approachDeadlineMs;
     private long nextRepathMs;
     private long nextPounceCheckMs;
-    private bool approachFailed;
-    private bool walking;
     private bool hitDone;
+    private int flightPointsChecked;
 
     public AiTaskSpiderJumpAttack(EntityAgent entity, JsonObject taskConfig, JsonObject aiConfig)
         : base(entity, taskConfig, aiConfig)
@@ -87,14 +89,14 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         // whenInEmotionState, retaliateAttacks.
 
         // Blocks: how far away it notices a target.
-        seekingRange = taskConfig["seekingRange"].AsFloat(8);
+        seekingRange = taskConfig["seekingRange"].AsFloat(10);
         // Blocks: it gives up once the target is farther than this.
         loseTargetRange = taskConfig["loseTargetRange"].AsFloat(16);
         // Blocks: it starts winding up once the target is this close (and one jump can reach it).
         pounceRange = taskConfig["pounceRange"].AsFloat(5);
         // Milliseconds: the wind-up lasts a random time between these two.
-        windUpMinMs = taskConfig["windUpMinMs"].AsInt(500);
-        windUpMaxMs = taskConfig["windUpMaxMs"].AsInt(1250);
+        windUpMinMs = taskConfig["windUpMinMs"].AsInt(350);
+        windUpMaxMs = taskConfig["windUpMaxMs"].AsInt(900);
         // 0..1: how far ahead of a moving target it aims (0 = where it is, 1 = where it will be at landing).
         leadFactor = taskConfig["leadFactor"].AsFloat(0.5f);
         // Blocks between the spider's box and the target's box that still count as a hit.
@@ -132,7 +134,6 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         turnSpeedRadPerSec = taskConfig["turnSpeedDegPerSec"].AsFloat(360) * (float)Math.PI / 180f;
         // Animation codes from the entity JSON; "" = none.
         windUpAnimation = SpiderTaskUtil.ReadAnimation(taskConfig, "windUpAnimation", "jumpwindup");
-        walkAnimation = SpiderTaskUtil.ReadAnimation(taskConfig, "walkAnimation", "walk");
 
         windUp = new WindUp(entity);
         runner = new JumpRunner(entity);
@@ -140,6 +141,12 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         // The pounce is one jump with the wind-up above, so the runner itself does no wind-up.
         runner.WindUpMinSeconds = 0;
         runner.WindUpMaxSeconds = 0;
+
+        walker = new Walker(entity, pathTraverser);
+        walker.Animation = SpiderTaskUtil.ReadAnimation(taskConfig, "walkAnimation", "walk");
+        // The path is re-aimed at the moving target every repathIntervalMs: reaching the end of one only stops the
+        // animation until the next. Being stuck or finding no path ends the attack (ContinueApproach).
+        walker.StopAnimationOnArrival = true;
     }
 
     /// <summary>Nothing may interrupt the spider while it is in the air.</summary>
@@ -277,11 +284,13 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         approachDeadlineMs = now + maxApproachMs;
         nextRepathMs = 0;
         nextPounceCheckMs = 0;
-        approachFailed = false;
-        walking = false;
+        walker.ClearOutcome();
         hitDone = false;
-        SpiderTaskUtil.Log(entity, LogName, "targets " + targetEntity.Code + " " + targetEntity.EntityId
-            + " at " + SpiderTaskUtil.Distance(entity, targetEntity).ToString("0.00") + " blocks");
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "targets " + targetEntity.Code + " " + targetEntity.EntityId
+                + " at " + SpiderTaskUtil.Distance(entity, targetEntity).ToString("0.00") + " blocks");
+        }
     }
 
     public override bool ContinueExecute(float dt)
@@ -292,13 +301,19 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         }
         if (SpiderTaskUtil.IsGone(entity, targetEntity))
         {
-            SpiderTaskUtil.Log(entity, LogName, "target gone during " + Phase);
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "target gone during " + Phase);
+            }
             return false;
         }
         double distance = SpiderTaskUtil.Distance(entity, targetEntity);
         if (distance > loseTargetRange)
         {
-            SpiderTaskUtil.Log(entity, LogName, "target escaped (" + distance.ToString("0.0") + " blocks)");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "target escaped (" + distance.ToString("0.0") + " blocks)");
+            }
             return false;
         }
         if (Phase == AttackPhase.Approach)
@@ -315,14 +330,20 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
     private bool ContinueApproach(double distance)
     {
         long now = entity.World.ElapsedMilliseconds;
-        if (approachFailed)
+        if (walker.Failed)
         {
-            SpiderTaskUtil.Log(entity, LogName, "no way to walk to the target");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "no way to walk to the target");
+            }
             return false;
         }
         if (now > approachDeadlineMs)
         {
-            SpiderTaskUtil.Log(entity, LogName, "gave up stalking after " + maxApproachMs + " ms");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "gave up stalking after " + maxApproachMs + " ms");
+            }
             return false;
         }
 
@@ -346,11 +367,14 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
 
     private void BeginWindUp()
     {
-        StopWalkingToTarget();
+        walker.Stop();
         windUp.Begin(windUpMinMs / 1000f, windUpMaxMs / 1000f, windUpAnimation, entity.World.Rand);
         Phase = AttackPhase.WindUp;
-        SpiderTaskUtil.Log(entity, LogName, "winds up for " + windUp.DurationSeconds.ToString("0.00") + " s, target at "
-            + SpiderTaskUtil.Distance(entity, targetEntity).ToString("0.00") + " blocks");
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "winds up for " + windUp.DurationSeconds.ToString("0.00") + " s, target at "
+                + SpiderTaskUtil.Distance(entity, targetEntity).ToString("0.00") + " blocks");
+        }
     }
 
     private bool ContinueWindUp(float dt)
@@ -364,35 +388,48 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         // The wind-up is over. The target has moved meanwhile: decide now what to do about where it is.
         if (IsWithinBite())
         {
-            SpiderTaskUtil.Log(entity, LogName, "target within reach, bites without leaping");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "target within reach, bites without leaping");
+            }
             Bite();
             return false;
         }
         if (!entity.OnGround)
         {
-            SpiderTaskUtil.Log(entity, LogName, "not on the ground after the wind-up, no leap");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "not on the ground after the wind-up, no leap");
+            }
             return false;
         }
         JumpStep step = PlanPounce(true);
         if (step == null)
         {
-            SpiderTaskUtil.Log(entity, LogName, "target out of reach after the wind-up, no leap");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "target out of reach after the wind-up, no leap");
+            }
             return false;
         }
         List<JumpStep> plan = new List<JumpStep>();
         plan.Add(step);
         runner.Start(plan);
+        flightPointsChecked = 0;
         Phase = AttackPhase.Leap;
-        SpiderTaskUtil.Log(entity, LogName, "leaps from " + SpiderTaskUtil.Format(step.FromX, step.FromY, step.FromZ)
-            + " to " + SpiderTaskUtil.Format(step.ToX, step.ToY, step.ToZ) + ", flight " + step.FlightSeconds.ToString("0.000")
-            + " s; target at " + SpiderTaskUtil.Format(targetEntity.Pos.X, targetEntity.Pos.Y, targetEntity.Pos.Z));
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "leaps from " + SpiderTaskUtil.Format(step.FromX, step.FromY, step.FromZ)
+                + " to " + SpiderTaskUtil.Format(step.ToX, step.ToY, step.ToZ) + ", flight " + FlightSecondsOf(step).ToString("0.000")
+                + " s; target at " + SpiderTaskUtil.Format(targetEntity.Pos.X, targetEntity.Pos.Y, targetEntity.Pos.Z));
+        }
         return true;
     }
 
     private bool ContinueLeap(float dt)
     {
         runner.Tick(dt);
-        if (!hitDone && !SpiderTaskUtil.IsGone(entity, targetEntity) && IsWithinBite())
+        if (!hitDone && !SpiderTaskUtil.IsGone(entity, targetEntity) && (TouchedAlongFlight() || IsWithinBite()))
         {
             Bite();
         }
@@ -405,8 +442,11 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         {
             result = "hit";
         }
-        SpiderTaskUtil.Log(entity, LogName, "leap over (" + runner.LastEndReason + ", " + result + "), landed at "
-            + SpiderTaskUtil.Format(entity.Pos.X, entity.Pos.Y, entity.Pos.Z));
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "leap over (" + runner.LastEndReason + ", " + result + "), landed at "
+                + SpiderTaskUtil.Format(entity.Pos.X, entity.Pos.Y, entity.Pos.Z));
+        }
         return false;
     }
 
@@ -414,10 +454,13 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
     {
         windUp.Cancel();
         runner.Stop();
-        StopWalkingToTarget();
+        walker.Stop();
         if (cancelled)
         {
-            SpiderTaskUtil.Log(entity, LogName, "interrupted during " + Phase);
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "interrupted during " + Phase);
+            }
         }
         Phase = AttackPhase.None;
         base.FinishExecute(cancelled);
@@ -440,11 +483,12 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
             return step;
         }
 
-        // Motion is in blocks per 1/60 s; the planner works in blocks per second.
+        // Motion is in blocks per 1/60 s; the planner works in blocks per second. Lead by the real (sped-up) flight time.
         double speedX = targetEntity.Pos.Motion.X * JumpMath.BlocksPerSecondPerMotionUnit;
         double speedZ = targetEntity.Pos.Motion.Z * JumpMath.BlocksPerSecondPerMotionUnit;
-        double aheadX = PounceMath.LeadPosition(targetX, speedX, step.FlightSeconds, leadFactor);
-        double aheadZ = PounceMath.LeadPosition(targetZ, speedZ, step.FlightSeconds, leadFactor);
+        double flightSeconds = FlightSecondsOf(step);
+        double aheadX = PounceMath.LeadPosition(targetX, speedX, flightSeconds, leadFactor);
+        double aheadZ = PounceMath.LeadPosition(targetZ, speedZ, flightSeconds, leadFactor);
         JumpStep led = PlanJumpTo(world, aheadX, targetY, aheadZ, limits);
         if (led != null)
         {
@@ -478,16 +522,49 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         return step;
     }
 
+    // How long the spider really is in the air on this jump (the arc is flown faster than the game's gravity would).
+    private static double FlightSecondsOf(JumpStep step)
+    {
+        return FlightSchedule.DrivenSeconds(step.FlightTicks, JumpingSpidersModSystem.Config.JumpFlightSpeedMultiplier);
+    }
+
     // True when the spider's collision box is within hitReach of the target's.
     private bool IsWithinBite()
+    {
+        return IsWithinBiteAt(entity.Pos.X, entity.Pos.Y, entity.Pos.Z);
+    }
+
+    // Checks the points of the flight recorded since the last call (one per physics tick, see
+    // JumpController.FlightPath), and the point halfway to each, against where the target is now.
+    private bool TouchedAlongFlight()
+    {
+        List<Vec3d> path = runner.Controller.FlightPath;
+        if (flightPointsChecked < 1)
+        {
+            flightPointsChecked = 1;
+        }
+        bool touched = false;
+        for (int i = flightPointsChecked; i < path.Count && !touched; i++)
+        {
+            Vec3d before = path[i - 1];
+            Vec3d after = path[i];
+            touched = IsWithinBiteAt((before.X + after.X) / 2, (before.Y + after.Y) / 2, (before.Z + after.Z) / 2)
+                || IsWithinBiteAt(after.X, after.Y, after.Z);
+        }
+        flightPointsChecked = path.Count;
+        return touched;
+    }
+
+    // True when the spider's collision box, with its feet at (x, y, z), is within hitReach of the target's box.
+    private bool IsWithinBiteAt(double x, double y, double z)
     {
         if (targetEntity.Pos.Dimension != entity.Pos.Dimension)
         {
             return false;
         }
         double gap = PounceMath.BoxGap(
-            entity.Pos.X + entity.CollisionBox.X1, entity.Pos.Y + entity.CollisionBox.Y1, entity.Pos.Z + entity.CollisionBox.Z1,
-            entity.Pos.X + entity.CollisionBox.X2, entity.Pos.Y + entity.CollisionBox.Y2, entity.Pos.Z + entity.CollisionBox.Z2,
+            x + entity.CollisionBox.X1, y + entity.CollisionBox.Y1, z + entity.CollisionBox.Z1,
+            x + entity.CollisionBox.X2, y + entity.CollisionBox.Y2, z + entity.CollisionBox.Z2,
             targetEntity.Pos.X + targetEntity.CollisionBox.X1, targetEntity.Pos.Y + targetEntity.CollisionBox.Y1, targetEntity.Pos.Z + targetEntity.CollisionBox.Z1,
             targetEntity.Pos.X + targetEntity.CollisionBox.X2, targetEntity.Pos.Y + targetEntity.CollisionBox.Y2, targetEntity.Pos.Z + targetEntity.CollisionBox.Z2);
         return gap <= hitReach;
@@ -505,48 +582,15 @@ public class AiTaskSpiderJumpAttack : AiTaskBaseTargetable
         source.DamageTier = damageTier;
         source.KnockbackStrength = knockbackStrength;
         bool hurt = targetEntity.ReceiveDamage(source, damage * GlobalConstants.CreatureDamageModifier);
-        SpiderTaskUtil.Log(entity, LogName, "bites " + targetEntity.Code + " " + targetEntity.EntityId + " for " + damage
-            + " (damage taken: " + hurt + ", target alive: " + targetEntity.Alive + ")");
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "bites " + targetEntity.Code + " " + targetEntity.EntityId + " for " + damage
+                + " (damage taken: " + hurt + ", target alive: " + targetEntity.Alive + ")");
+        }
     }
 
     private void WalkTowardsTarget()
     {
-        bool started = pathTraverser.NavigateTo_Async(targetEntity.Pos.XYZ, moveSpeed, ApproachStopDistance,
-            OnApproachGoalReached, OnApproachStuck, OnApproachNoPath);
-        if (started && !walking)
-        {
-            walking = true;
-            SpiderTaskUtil.StartAnimation(entity, walkAnimation);
-        }
-    }
-
-    private void StopWalkingToTarget()
-    {
-        pathTraverser.Stop();
-        if (walking)
-        {
-            walking = false;
-            SpiderTaskUtil.StopAnimation(entity, walkAnimation);
-        }
-    }
-
-    // Pathfinder callbacks (the game calls these from the traverser's tick).
-    private void OnApproachGoalReached()
-    {
-        if (walking)
-        {
-            walking = false;
-            SpiderTaskUtil.StopAnimation(entity, walkAnimation);
-        }
-    }
-
-    private void OnApproachStuck()
-    {
-        approachFailed = true;
-    }
-
-    private void OnApproachNoPath()
-    {
-        approachFailed = true;
+        walker.NavigateTo(targetEntity.Pos.XYZ, moveSpeed, ApproachStopDistance);
     }
 }

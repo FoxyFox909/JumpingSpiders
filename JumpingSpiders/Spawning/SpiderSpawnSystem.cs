@@ -13,8 +13,8 @@ namespace JumpingSpiders;
 /// this class registers one in Start. Vintage Story's own spawner works the same way on a timer.
 ///
 /// Cost of one check: for each player, (2 r + 1)^2 chunk hashes with r = SpawnMaxPlayerDistance / 32 rounded up
-/// (49 for the default 80 blocks), a map-chunk lookup for each spider chunk found, then at most
-/// Config.MaxSpawnAttemptsPerCheck spawn attempts. An attempt in a chunk whose hammock is already known, or that is
+/// (49 for the default 80 blocks), a map-chunk lookup for each spider chunk found, the quick rules (a record read and
+/// one entity query) for each of those, then at most Config.MaxSpawnAttemptsPerCheck spawn attempts. An attempt in a chunk whose hammock is already known, or that is
 /// refused, costs well under a millisecond (a climate lookup, one entity query, a few block reads). Only an attempt
 /// that must find a spot for a new hammock searches the chunk's trees (Config.WildHammockTreesPerAttempt trunks,
 /// about 8 ms each), and at most one such search happens per check. Nothing is done when no player is online, when
@@ -56,31 +56,40 @@ public class SpiderSpawnSystem
     }
 
     /// <summary>
-    /// One check for the given player positions: picks up to Config.MaxSpawnAttemptsPerCheck loaded spider chunks
-    /// near them at random and tries a spawn in each (stopping after the first one that had to search trees).
+    /// One check for the given player positions: goes through the loaded spider chunks near them in random order,
+    /// skips those that the quick rules refuse (WildSpiderSpawner.PassesQuickRules: cooldown, cap), and tries a spawn
+    /// in up to Config.MaxSpawnAttemptsPerCheck of the others (stopping after the first one that had to search trees).
     /// Returns what each attempt did.
     /// </summary>
     public List<SpawnResult> RunCheck(List<Vec3d> players)
     {
         List<SpawnResult> results = new List<SpawnResult>();
         List<ChunkCoord> candidates = FindLoadedSpiderChunksNear(players);
-        Shuffle(candidates);
+        int[] order = RandomOrder.Shuffled(candidates.Count, api.World.Rand);
 
-        int attempts = JumpingSpidersModSystem.Config.MaxSpawnAttemptsPerCheck;
-        for (int i = 0; i < candidates.Count && i < attempts; i++)
+        int maxAttempts = JumpingSpidersModSystem.Config.MaxSpawnAttemptsPerCheck;
+        int attempts = 0;
+        for (int i = 0; i < order.Length && attempts < maxAttempts; i++)
         {
-            ChunkCoord chunk = candidates[i];
+            ChunkCoord chunk = candidates[order[i]];
+            // A chunk on cooldown or at its cap is passed over without using up an attempt, so the spawn rate near
+            // each player does not fall as more players share the attempts of a check.
+            if (!WildSpiderSpawner.PassesQuickRules(api, chunk.X, chunk.Z))
+            {
+                continue;
+            }
+            attempts++;
             BlockPos center = new BlockPos(chunk.X * TreeTrunks.ChunkSize + TreeTrunks.ChunkSize / 2, api.World.SeaLevel,
                 chunk.Z * TreeTrunks.ChunkSize + TreeTrunks.ChunkSize / 2, 0);
             SpawnRequest request = SpawnRequest.Create(chunk.X, chunk.Z, SpiderAttributes.IsNight(api.World, center), api.World.Rand);
             request.PlayerPositions = players;
             SpawnResult result = WildSpiderSpawner.TrySpawn(api, request);
             results.Add(result);
-            if (result.Outcome == SpawnOutcome.Spawned)
+            if (SpiderTaskUtil.IsDebugLogOn() && result.Outcome == SpawnOutcome.Spawned)
             {
                 api.World.Logger.Debug("[jumpingspiders] Wild spawn in chunk {0}, {1}: {2}", chunk.X, chunk.Z, result.Message);
             }
-            else
+            else if (SpiderTaskUtil.IsDebugLogOn())
             {
                 api.World.Logger.VerboseDebug("[jumpingspiders] No wild spawn in chunk {0}, {1} ({2}): {3}", chunk.X, chunk.Z,
                     result.Outcome, result.Message);
@@ -143,16 +152,5 @@ public class SpiderSpawnSystem
             }
         }
         return result;
-    }
-
-    private void Shuffle(List<ChunkCoord> list)
-    {
-        for (int i = list.Count - 1; i > 0; i--)
-        {
-            int j = api.World.Rand.Next(i + 1);
-            ChunkCoord temp = list[i];
-            list[i] = list[j];
-            list[j] = temp;
-        }
     }
 }

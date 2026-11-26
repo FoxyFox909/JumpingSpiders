@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Vintagestory.API.Common;
 using Vintagestory.API.MathTools;
@@ -9,13 +10,21 @@ namespace JumpingSpiders;
 /// main thread when a new wild spider rolled "comes with a hammock".
 ///
 /// 1. The chunk's record (WildHammockRecords) names a hammock: if the hammock is still there, use it.
-///    If it is gone (broken, burnt), forget it and carry on.
+///    If it is gone (broken, burnt), forget it and carry on. If its chunk is not loaded, nobody can tell: a natural
+///    spawn is refused for now, a forced one carries on with step 2 and leaves the record as it is unless it finds
+///    another hammock.
 /// 2. Any hammock within Config.WildHammockReuseRange of the chunk's centre: adopt it as the chunk's hammock.
 /// 3. Place a new one on a tree trunk in the chunk: a cell beside the trunk, Config.WildHammockMinHeight to
 ///    WildHammockMaxHeight blocks above its base, that a spider on the ground nearby could jump into (one jump, or
 ///    two by way of a perch such as a branch; see HammockReachFinder). Among the reachable spots, higher ones are
 ///    much more likely (Config.WildHammockHeightBias). Only Config.WildHammockTreesPerAttempt trunks are tested.
 ///    When none works, the record says so and the chunk is not searched again for Config.WildHammockRetryDays.
+///
+/// A forced spawn (SpawnRequest.SpawnNear, from /jspider spawn) does steps 2 and 3 around its point instead, within
+/// Config.WildSpawnRadiusFromHammock, trying the nearest trunks first, in neighbouring chunks too. Its hammock is
+/// recorded as the hammock of the chunk the spawn was for, in any chunk: natural spawning only ever reads the
+/// records of spider chunks, so a record in another chunk is just remembered for the next forced spawn there.
+/// When a forced search finds no tree, nothing is recorded: it looked at only part of the chunk.
 /// </summary>
 public static class WildHammockSites
 {
@@ -25,63 +34,91 @@ public static class WildHammockSites
     /// <summary>
     /// The chunk's hammock (existing or newly placed), or null when there is none and none could be placed.
     /// Updates and saves the record. spiderBox is the spider's collision box (relative to its feet).
+    /// When the recorded hammock's chunk is not loaded, a natural spawn is refused instead: result then has the
+    /// outcome ChunkNotLoaded, and the caller must stop there.
     /// </summary>
     public static BlockPos FindOrPlace(IWorldAccessor world, IMapChunk mapChunk, WildHammockRecord record,
         SpawnRequest request, Cuboidf spiderBox, SpawnResult result)
     {
         JumpingSpidersConfig config = JumpingSpidersModSystem.Config;
 
-        // 1. The remembered hammock, checked against the world.
+        // 1. The remembered hammock, checked against the world. It can stand outside the record's own chunk (beside a
+        // trunk at the edge), and an unloaded chunk reads as empty: only a loaded chunk without it means it is gone.
         if (record.State == WildHammockState.HasHammock)
         {
             BlockPos remembered = new BlockPos(record.X, record.Y, record.Z, 0);
-            if (HammockFinder.GetHammockAt(world, remembered) != null)
+            if (world.BlockAccessor.GetChunkAtBlockPos(remembered) == null)
             {
-                result.HammockReused = true;
+                if (!request.Forced)
+                {
+                    result.Fail(SpawnOutcome.ChunkNotLoaded, "The chunk of the recorded hammock at " + Describe(remembered)
+                        + " is not loaded.");
+                    return null;
+                }
+                result.Note("The chunk of the recorded hammock at " + Describe(remembered) + " is not loaded, so it is left alone.");
+            }
+            else if (HammockFinder.GetHammockAt(world, remembered) != null)
+            {
                 result.Note("Reused the chunk's hammock at " + Describe(remembered) + ".");
                 return remembered;
             }
-            result.Note("The chunk's recorded hammock at " + Describe(remembered) + " is gone.");
-            record.ClearHammock();
-            WildHammockRecords.Save(mapChunk, record);
+            else
+            {
+                result.Note("The chunk's recorded hammock at " + Describe(remembered) + " is gone.");
+                record.ClearHammock();
+                WildHammockRecords.Save(mapChunk, record);
+            }
         }
 
         // 2. Look for a hammock that is already near: reuse it rather than placing another one close by.
+        // A forced spawn looks near its point (the player) instead of near the chunk's centre.
         BlockPos center = ChunkCenterAtGround(mapChunk, request.ChunkX, request.ChunkZ);
-        BlockEntitySilkHammock nearest = FindNearestHammock(world, center, config.WildHammockReuseRange);
+        double reuseRange = config.WildHammockReuseRange;
+        if (request.SpawnNear != null)
+        {
+            center = new BlockPos((int)Math.Floor(request.SpawnNear.X), (int)Math.Floor(request.SpawnNear.Y),
+                (int)Math.Floor(request.SpawnNear.Z), 0);
+            reuseRange = config.WildSpawnRadiusFromHammock;
+        }
+        BlockEntitySilkHammock nearest = FindNearestHammock(world, center, reuseRange);
         if (nearest != null)
         {
             BlockPos found = nearest.Pos.Copy();
             Remember(mapChunk, record, found);
-            result.HammockReused = true;
             result.Note("Adopted the existing hammock at " + Describe(found) + " as the chunk's hammock.");
             return found;
         }
 
-        // 3. Place a new one, unless a recent search already found no usable tree.
+        // 3. Place a new one, unless a recent search already found no usable tree. That "no tree" is about the
+        // whole chunk, so it does not hold back a forced spawn's search near its point.
         double now = world.Calendar.TotalHours;
-        if (record.State == WildHammockState.NoSite
+        if (request.SpawnNear == null && record.State == WildHammockState.NoSite
             && !SpawnRules.ShouldSearchAgain(record.SearchedTotalHours, now, config.WildHammockRetryDays * world.Calendar.HoursPerDay))
         {
-            result.NoUsableTree = true;
             result.Note("No usable tree here (searched recently; next search after " + config.WildHammockRetryDays + " in-game days).");
             return null;
         }
 
         BlockPos placed = PlaceOnTree(world, mapChunk, request, spiderBox, result);
+        if (placed == null && request.SpawnNear != null)
+        {
+            // Only the trees near the point were searched, so the chunk's record learns nothing.
+            result.Note("No usable tree within " + config.WildSpawnRadiusFromHammock + " blocks: " + result.TrunksFound
+                + " trunks found, " + result.TrunksTested + " tested, " + result.SpotsTested
+                + " hammock spots tested, none reachable by jumping. The spider spawns without a hammock.");
+            return null;
+        }
         if (placed == null)
         {
             record.ClearHammock();
             record.State = WildHammockState.NoSite;
             record.SearchedTotalHours = now;
             WildHammockRecords.Save(mapChunk, record);
-            result.NoUsableTree = true;
             result.Note("No usable tree: " + result.TrunksFound + " trunks found, " + result.TrunksTested + " tested, "
                 + result.SpotsTested + " hammock spots tested, none reachable by jumping.");
             return null;
         }
         Remember(mapChunk, record, placed);
-        result.HammockPlaced = true;
         result.Note("Placed a new hammock at " + Describe(placed) + ", " + result.HammockHeight + " blocks above the trunk base.");
         return placed;
     }
@@ -137,10 +174,25 @@ public static class WildHammockSites
     {
         JumpingSpidersConfig config = JumpingSpidersModSystem.Config;
         result.SearchedTrees = true;
-        List<TrunkColumn> trunks = TreeTrunks.FindInChunk(world.BlockAccessor, mapChunk, request.ChunkX, request.ChunkZ,
-            config.WildHammockMaxHeight + 1);
+        List<TrunkColumn> trunks;
+        if (request.SpawnNear != null)
+        {
+            // A forced spawn: the trees around its point, nearest first, so the hammock is where the player looks.
+            trunks = TreeTrunks.FindNear(world.BlockAccessor, request.SpawnNear.X, request.SpawnNear.Z,
+                config.WildSpawnRadiusFromHammock, config.WildHammockMaxHeight + 1);
+        }
+        else
+        {
+            List<TrunkColumn> found = TreeTrunks.FindInChunk(world.BlockAccessor, mapChunk, request.ChunkX, request.ChunkZ,
+                config.WildHammockMaxHeight + 1);
+            int[] order = RandomOrder.Shuffled(found.Count, request.Rand);
+            trunks = new List<TrunkColumn>();
+            for (int i = 0; i < order.Length; i++)
+            {
+                trunks.Add(found[order[i]]);
+            }
+        }
         result.TrunksFound = trunks.Count;
-        Shuffle(trunks, request);
 
         List<HammockCandidate> reachable = new List<HammockCandidate>();
         for (int i = 0; i < trunks.Count && result.TrunksTested < request.MaxTreesToTest; i++)
@@ -160,7 +212,6 @@ public static class WildHammockSites
                 }
             }
         }
-        result.SpotsReachable = reachable.Count;
 
         // Pick among the reachable spots, higher ones much more likely; if placing fails, pick again.
         List<double> heights = new List<double>();
@@ -168,15 +219,20 @@ public static class WildHammockSites
         {
             heights.Add(reachable[i].Height);
         }
+        List<double> weights = null;
+        if (reachable.Count > 0)
+        {
+            weights = HeightWeightedPicker.Weights(heights, config.WildHammockHeightBias);
+        }
         while (reachable.Count > 0)
         {
-            int index = HeightWeightedPicker.PickIndex(heights, config.WildHammockHeightBias, request.Rand);
+            int index = HeightWeightedPicker.PickIndexByWeight(weights, request.Rand);
             HammockCandidate chosen = reachable[index];
             reachable.RemoveAt(index);
-            heights.RemoveAt(index);
+            HeightWeightedPicker.RemoveAt(heights, weights, index, config.WildHammockHeightBias);
 
             BlockPos pos = new BlockPos(chosen.CellX, chosen.CellY, chosen.CellZ, 0);
-            if (HammockFinder.HasHammockWithinSpacing(world, pos, config.HammockSpacing))
+            if (HammockFinder.FindHammockWithinSpacing(world, pos, config.HammockSpacing) != null)
             {
                 continue;
             }
@@ -199,14 +255,15 @@ public static class WildHammockSites
     {
         JumpingSpidersConfig config = JumpingSpidersModSystem.Config;
         List<HammockCandidate> candidates = CollectCandidates(world, trunk, request, config);
-        BlockSilkHammock anyVariant = BlockSilkHammock.GetVariant(world, BlockFacing.DOWN);
-        if (candidates.Count == 0 || anyVariant == null || anyVariant.CollisionBoxes == null || anyVariant.CollisionBoxes.Length == 0)
+        // Wild hammocks hang on trunks, so they are always wall variants, and the four wall variants have the same
+        // collision box (see silkhammock.json): any wall variant's box will do.
+        BlockSilkHammock wallVariant = BlockSilkHammock.GetVariant(world, BlockFacing.NORTH);
+        if (candidates.Count == 0 || wallVariant == null || wallVariant.CollisionBoxes == null || wallVariant.CollisionBoxes.Length == 0)
         {
             candidates.Clear();
             return candidates;
         }
-        // Every hammock variant has the same thin floor (see silkhammock.json), so any variant's box will do.
-        Cuboidf floor = anyVariant.CollisionBoxes[0];
+        Cuboidf floor = wallVariant.CollisionBoxes[0];
         RelativeBox floorBox = new RelativeBox(floor.X1, floor.Y1, floor.Z1, floor.X2, floor.Y2, floor.Z2);
         RelativeBox spider = new RelativeBox(spiderBox.X1, spiderBox.Y1, spiderBox.Z1, spiderBox.X2, spiderBox.Y2, spiderBox.Z2);
 
@@ -244,12 +301,10 @@ public static class WildHammockSites
                 BlockFacing outward = BlockFacing.HORIZONTALS[side];
                 BlockFacing towardTrunk = outward.Opposite;
                 BlockPos cell = new BlockPos(trunk.X + outward.Normali.X, y, trunk.Z + outward.Normali.Z, 0);
-                BlockSilkHammock variant = BlockSilkHammock.GetVariant(world, towardTrunk);
-                if (variant == null || !HammockBuilder.IsCellFreeForHammock(world, cell, variant))
-                {
-                    continue;
-                }
-                if (!BlockSilkHammock.IsSupportedFrom(blockAccessor, variant, cell, towardTrunk))
+                // Unlike a spider's own building, a wall hammock under a solid block (a branch, leaves) is allowed:
+                // MarkReachable tests with real jumps whether a spider gets in.
+                BlockFacing[] onlyTowardTrunk = new BlockFacing[] { towardTrunk };
+                if (HammockBuilder.FindSupportFacing(world, cell, onlyTowardTrunk, false) == null)
                 {
                     continue;
                 }
@@ -281,16 +336,5 @@ public static class WildHammockSites
             }
         }
         return false;
-    }
-
-    private static void Shuffle(List<TrunkColumn> list, SpawnRequest request)
-    {
-        for (int i = list.Count - 1; i > 0; i--)
-        {
-            int j = request.Rand.Next(i + 1);
-            TrunkColumn temp = list[i];
-            list[i] = list[j];
-            list[j] = temp;
-        }
     }
 }

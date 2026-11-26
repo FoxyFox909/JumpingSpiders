@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
 using System.Text;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
 using Vintagestory.API.Config;
@@ -18,16 +22,21 @@ namespace JumpingSpiders;
 ///
 /// Its jobs:
 /// - OnKilledEntity: the spider killed something. Any kill makes it sated; a valid meal (farm-born chicken or
-///   hare) credits breeding saturation and makes a domesticated adult build a hammock (as soon as it stands on the
-///   ground again: the killing bite is usually made in mid-leap). SpiderRegistration calls
-///   this for every kill through the game's global death event; AI tasks may call it too (a repeat call for the
-///   same victim is ignored).
+///   hare) credits breeding saturation and, for a domesticated adult, owes one hammock: the build task
+///   (AiTaskSpiderBuildHammock) then makes an attempt every in-game hour while the spider is sated, until one
+///   succeeds. SpiderRegistration calls this for every kill through the game's global death event, which the game
+///   fires once per death (Entity.Die does nothing for an entity that is already dead).
 /// - The "live prey only" rule: the vanilla eat task (needed so a baited basket trap lures the spider) adds
 ///   breeding saturation for every portion it eats. This behavior takes that back at once, so only meals
 ///   credited here count for breeding. See SaturationGuard.
 /// - Despawn protection: a spider the player caught, placed, bred or fed never despawns. See DespawnRules.
 /// - OnHammockBrokenWhileAsleep: a wild spider woken by a player breaking its hammock turns on that player.
+/// - OnEntityDeath: a spider that dies while held still (in a ceiling hammock's cradle, or against a wall while it
+///   builds) is let go and no longer asleep; its AI tasks, which would do that, stop running at death.
 /// - Info text: wild or domesticated, hungry or sated, asleep.
+/// - Per-sex model tweaks (client): both adult sexes share one model file, and OnTesselation scales or reshapes the
+///   elements the entity JSON lists in "elementScalesByType" (the female's thinner pedipalps). See ElementScales and
+///   BoxReshape.
 /// </summary>
 public class EntityBehaviorJumpingSpider : EntityBehavior
 {
@@ -49,19 +58,24 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
     /// <summary>Despawn timer used for kept spiders: so large that it never runs out, in real seconds.</summary>
     private const float NeverDespawnSeconds = float.MaxValue;
 
-    // Entity id of the last victim credited, so a second report of the same kill is ignored. In memory only:
-    // a kill is reported within the same tick, long before any save.
-    private long lastCreditedVictimId = -1;
-
     // True while this behavior itself writes the saturation (EnforceSaturationLimit or CreditMeal), so the
     // "hunger" listener does not react to our own change.
     private bool enforcingSaturation;
 
     private float slowCheckAccum;
 
-    // True after a meal that earns a hammock, until the spider is on the ground and builds it. In memory only: a
-    // spider is airborne for a second at most, so a save in between (which drops the build) is very unlikely.
-    private bool hammockBuildPending;
+    /// <summary>
+    /// Key in this behavior's JSON (the client list) for the element scale table. Written "elementScalesByType" in
+    /// the JSON so each sex can have its own; the game resolves that to "elementScales" for each entity type.
+    /// </summary>
+    private const string ElementScalesKey = "elementScales";
+
+    // Model elements to draw at a different size or shape than modelled, from the JSON. Empty on the server (the
+    // server behavior list has no table) and for the male.
+    private readonly ElementScales elementScales = new ElementScales();
+
+    // So a misspelled element name is reported once per spider, not every time its mesh is rebuilt.
+    private bool missingElementsReported;
 
     public EntityBehaviorJumpingSpider(Entity entity) : base(entity)
     {
@@ -75,6 +89,8 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
     public override void Initialize(EntityProperties properties, JsonObject attributes)
     {
         base.Initialize(properties, attributes);
+
+        ReadElementScales(attributes);
 
         if (entity.World.Side != EnumAppSide.Server)
         {
@@ -112,6 +128,30 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
         base.OnEntityDespawn(despawn);
     }
 
+    /// <summary>
+    /// The game calls this when the spider dies, however it dies (also by /kill or entity.Die() without any damage).
+    /// The game stops running a dead entity's AI tasks, so a task that held the spider in a ceiling hammock's cradle or
+    /// against a wall never gets to undo that: it is undone here. Its physics runs again (the body drops to the floor)
+    /// and it is no longer asleep.
+    /// </summary>
+    public override void OnEntityDeath(DamageSource damageSourceForDeath)
+    {
+        base.OnEntityDeath(damageSourceForDeath);
+        if (entity.World.Side != EnumAppSide.Server)
+        {
+            return;
+        }
+        EntityAgent agent = entity as EntityAgent;
+        if (agent != null && SpiderTaskUtil.IsPhysicsPaused(agent))
+        {
+            SpiderTaskUtil.SetPhysicsPaused(agent, false);
+        }
+        if (SpiderAttributes.IsSleeping(entity))
+        {
+            SpiderAttributes.SetSleeping(entity, false);
+        }
+    }
+
     public override void OnGameTick(float deltaTime)
     {
         if (entity.World.Side != EnumAppSide.Server || !entity.Alive)
@@ -124,19 +164,6 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
         // before the eat task in the same tick. It is two attribute reads and a compare.
         EnforceSaturationLimit();
 
-        // A meal made while airborne: build once the spider has landed. A spider that ends up in water gives up.
-        if (hammockBuildPending)
-        {
-            if (entity.OnGround)
-            {
-                BuildPendingHammock();
-            }
-            else if (entity.Swimming || entity.FeetInLiquid)
-            {
-                hammockBuildPending = false;
-            }
-        }
-
         slowCheckAccum += deltaTime;
         if (slowCheckAccum >= SlowCheckIntervalSeconds)
         {
@@ -147,19 +174,13 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
 
     // ---------------- Kills and meals ----------------
 
-    /// <summary>Called when this spider killed victim (server only): sated; meal credit; hammock building.</summary>
+    /// <summary>Called when this spider killed victim (server only): sated; meal credit; a hammock owed.</summary>
     public void OnKilledEntity(Entity victim)
     {
         if (entity.World.Side != EnumAppSide.Server || victim == null)
         {
             return;
         }
-        if (victim.EntityId == lastCreditedVictimId)
-        {
-            return;
-        }
-        lastCreditedVictimId = victim.EntityId;
-
         JumpingSpidersConfig config = JumpingSpidersModSystem.Config;
 
         // Any kill: stop hunting prey and rivals for a while.
@@ -171,8 +192,19 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
         bool validMeal = MealRules.IsValidMeal(victim.Code.Path, victimGeneration, config.MealPreyCodePrefixes,
             config.MinPreyGenerationForMeal, isAdult);
 
-        entity.World.Logger.Debug("[jumpingspiders] {0} (id {1}) killed {2} (generation {3}); valid meal: {4}",
-            entity.Code, entity.EntityId, victim.Code, victimGeneration, validMeal);
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            entity.World.Logger.Debug("[jumpingspiders] {0} (id {1}) killed {2} (generation {3}); valid meal: {4}",
+                entity.Code, entity.EntityId, victim.Code, victimGeneration, validMeal);
+        }
+
+        if (MealRules.ShouldBuildHammock(validMeal, isAdult, SpiderAttributes.IsDomesticated(entity), config.HammockNeedsFarmPrey))
+        {
+            // One hammock owed for this kill. The build task makes the attempts (hourly, while sated), starting as soon
+            // as the spider stands on the ground again: the killing bite is usually made in mid-leap. The time of the
+            // next attempt is left as it is, so a kill never brings an attempt sooner than an hour after the last one.
+            SpiderAttributes.SetHammockBuildArmed(entity, true);
+        }
 
         if (!validMeal)
         {
@@ -185,31 +217,6 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
         SpiderAttributes.MarkKeptByPlayer(entity);
         UpdateDespawnProtection();
 
-        if (MealRules.ShouldBuildHammock(validMeal, isAdult, SpiderAttributes.IsDomesticated(entity)))
-        {
-            // The bite usually lands while the spider is still in the air. The builder checks reachability with the
-            // jump planner from the spider's feet, and planning from mid-air would accept spots that are out of reach
-            // from the ground, so the build waits until the spider stands again (see OnGameTick).
-            hammockBuildPending = true;
-            if (entity.OnGround)
-            {
-                BuildPendingHammock();
-            }
-        }
-    }
-
-    // Builds the hammock a meal earned. Called once the spider stands on the ground.
-    private void BuildPendingHammock()
-    {
-        hammockBuildPending = false;
-        EntityAgent agent = entity as EntityAgent;
-        if (agent == null)
-        {
-            return;
-        }
-        bool built = HammockBuilder.TryBuildHammockFor(agent);
-        entity.World.Logger.Debug("[jumpingspiders] {0} (id {1}) tried to build a hammock after a meal: {2}",
-            entity.Code, entity.EntityId, built);
     }
 
     // Adds portions to the vanilla breeding saturation, as a real meal the guard lets through.
@@ -259,8 +266,11 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
             if (SaturationGuard.NeedsCorrection(current, credited))
             {
                 SpiderAttributes.SetBreedingSaturation(entity, allowed);
-                entity.World.Logger.Debug("[jumpingspiders] {0} (id {1}) ate something that was not live prey; breeding saturation kept at {2}",
-                    entity.Code, entity.EntityId, allowed);
+                if (SpiderTaskUtil.IsDebugLogOn())
+                {
+                    entity.World.Logger.Debug("[jumpingspiders] {0} (id {1}) ate something that was not live prey; breeding saturation kept at {2}",
+                        entity.Code, entity.EntityId, allowed);
+                }
             }
             if (allowed != credited)
             {
@@ -286,9 +296,7 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
     // would break; changing its timer is what vanilla does for dropped player items.)
     private void UpdateDespawnProtection()
     {
-        bool kept = DespawnRules.IsKeptByPlayer(SpiderAttributes.GetGeneration(entity), SpiderAttributes.GetOrigin(entity),
-            SpiderAttributes.IsMarkedKeptByPlayer(entity));
-        if (!kept)
+        if (!SpiderAttributes.IsKept(entity))
         {
             return;
         }
@@ -338,8 +346,200 @@ public class EntityBehaviorJumpingSpider : EntityBehavior
         // The random value 0 passes the state's "chance" roll, so breaking the hammock always angers the spider.
         // The state's own "maxGeneration" (0 in the JSON) still applies.
         bool triggered = emotions.TryTriggerState(AggressiveStateCode, 0.0, playerEntityId);
-        entity.World.Logger.Debug("[jumpingspiders] {0} (id {1}) woken by a broken hammock; aggressive: {2}",
-            entity.Code, entity.EntityId, triggered);
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            entity.World.Logger.Debug("[jumpingspiders] {0} (id {1}) woken by a broken hammock; aggressive: {2}",
+                entity.Code, entity.EntityId, triggered);
+        }
+    }
+
+    // ---------------- Model: per-sex element scales ----------------
+
+    // Reads "elementScales" ({ "ElementName": scale or [x, y, z], ... }) from this behavior's JSON. Bad entries are
+    // skipped with a warning, so a typo in the JSON never stops the spider from loading.
+    private void ReadElementScales(JsonObject attributes)
+    {
+        if (attributes == null || !attributes[ElementScalesKey].Exists)
+        {
+            return;
+        }
+
+        // JsonObject wraps a token of the Newtonsoft JSON library, which the game uses to read its JSON files.
+        JObject table = attributes[ElementScalesKey].Token as JObject;
+        if (table == null)
+        {
+            entity.World.Logger.Warning("[jumpingspiders] {0}: \"{1}\" must map element names to a number or to [x, y, z]; ignored",
+                entity.Code, ElementScalesKey);
+            return;
+        }
+
+        foreach (JProperty entry in table.Properties())
+        {
+            double[] numbers = ReadNumbers(entry.Value);
+            if (!elementScales.SetFromNumbers(entry.Name, numbers))
+            {
+                entity.World.Logger.Warning("[jumpingspiders] {0}: element scale {1} = {2} ignored (it must be one number or [x, y, z], each from {3} to {4})",
+                    entity.Code, entry.Name, entry.Value.ToString(Formatting.None), ElementScales.MinScale, ElementScales.MaxScale);
+            }
+        }
+    }
+
+    // The numbers in one table value: a single number gives one, an array of numbers gives them all. Anything else
+    // (text, an array holding something other than numbers) gives null, which ElementScales refuses.
+    private static double[] ReadNumbers(JToken value)
+    {
+        if (IsNumber(value))
+        {
+            return new double[] { (double)value };
+        }
+        JArray array = value as JArray;
+        if (array == null)
+        {
+            return null;
+        }
+        double[] numbers = new double[array.Count];
+        for (int i = 0; i < array.Count; i++)
+        {
+            if (!IsNumber(array[i]))
+            {
+                return null;
+            }
+            numbers[i] = (double)array[i];
+        }
+        return numbers;
+    }
+
+    private static bool IsNumber(JToken value)
+    {
+        return value != null && (value.Type == JTokenType.Float || value.Type == JTokenType.Integer);
+    }
+
+    /// <summary>
+    /// The game calls this just before it builds the entity's mesh from its shape (on the client, when the spider
+    /// comes into view and whenever the shape is marked modified). entityShape is the shape loaded from the model
+    /// file, and it is shared: the game loads each shape file once and every entity of every type that uses that
+    /// file (here both adult sexes) gets the same object. So the shape is copied before it is changed, and
+    /// shapeIsCloned tells the game it now holds a per-entity copy; the game then builds the mesh and this spider's
+    /// animator from the copy, so the animations move the changed parts too.
+    /// </summary>
+    public override void OnTesselation(ref Shape entityShape, string shapePathForLogging, ref bool shapeIsCloned, ref string[] willDeleteElements)
+    {
+        base.OnTesselation(ref entityShape, shapePathForLogging, ref shapeIsCloned, ref willDeleteElements);
+
+        if (elementScales.IsEmpty || entityShape == null || entityShape.Elements == null)
+        {
+            return;
+        }
+
+        if (!shapeIsCloned)
+        {
+            entityShape = entityShape.Clone();
+            shapeIsCloned = true;
+        }
+
+        HashSet<string> found = new HashSet<string>(StringComparer.Ordinal);
+        ResizeElements(entityShape.Elements, found);
+
+        if (!missingElementsReported)
+        {
+            List<string> missing = elementScales.MissingFrom(found);
+            if (missing.Count > 0)
+            {
+                missingElementsReported = true;
+                entity.World.Logger.Warning("[jumpingspiders] {0}: the shape {1} has no element named {2}, so it cannot be resized (see elementScalesByType in the entity JSON)",
+                    entity.Code, shapePathForLogging, string.Join(", ", missing));
+            }
+        }
+    }
+
+    // Walks the element tree, parents before children (a reshaped parent moves its children before they are
+    // reshaped themselves).
+    // - A uniform number multiplies the element's scale. Its children are scaled along with it by the game (a child
+    //   is placed inside its parent), so they need no entry of their own; a child that is listed too gets its own
+    //   number on top of its parent's.
+    // - Per-axis factors reshape the element's box (see BoxReshape). The children keep their size and are moved to
+    //   stay attached; a child that is listed too is reshaped in its own axes.
+    private void ResizeElements(ShapeElement[] elements, HashSet<string> found)
+    {
+        if (elements == null)
+        {
+            return;
+        }
+        for (int i = 0; i < elements.Length; i++)
+        {
+            ShapeElement element = elements[i];
+            double factor;
+            double[] boxFactors;
+            if (elementScales.TryGetScale(element.Name, out factor))
+            {
+                found.Add(element.Name);
+                element.ScaleX = ElementScales.Combine(element.ScaleX, factor);
+                element.ScaleY = ElementScales.Combine(element.ScaleY, factor);
+                element.ScaleZ = ElementScales.Combine(element.ScaleZ, factor);
+                // Each element remembers the inverse of its resting position (parents included), which the animator
+                // uses to move the mesh. The copy inherited the unscaled one; clearing it makes the game work it out
+                // again from the new scale when it loads the animator. Without this the parts would be scaled twice.
+                ClearInverseTransforms(element);
+            }
+            else if (elementScales.TryGetBoxFactors(element.Name, out boxFactors))
+            {
+                found.Add(element.Name);
+                ReshapeBox(element, boxFactors);
+                // The resting position changed for the element and its moved children, as above.
+                ClearInverseTransforms(element);
+            }
+            ResizeElements(element.Children, found);
+        }
+    }
+
+    // Moves the element's From and To toward its rotation origin by the factors, per axis of the element's own box,
+    // and moves each direct child (its From, To and rotation origin) so its joint keeps its place on the new box.
+    // Grandchildren are placed from the child's From, so they move with the child. New arrays are assigned rather
+    // than the old ones changed, so nothing that might share an array with the loaded shape is touched.
+    private static void ReshapeBox(ShapeElement element, double[] factors)
+    {
+        if (element.From == null || element.To == null)
+        {
+            return;
+        }
+        element.From = BoxReshape.ReshapeCorner(element.From, element.RotationOrigin, factors);
+        element.To = BoxReshape.ReshapeCorner(element.To, element.RotationOrigin, factors);
+
+        if (element.Children == null)
+        {
+            return;
+        }
+        for (int i = 0; i < element.Children.Length; i++)
+        {
+            ShapeElement child = element.Children[i];
+            double[] shift = BoxReshape.ChildShift(child.RotationOrigin, factors);
+            if (child.From != null)
+            {
+                child.From = BoxReshape.Add(child.From, shift);
+            }
+            if (child.To != null)
+            {
+                child.To = BoxReshape.Add(child.To, shift);
+            }
+            if (child.RotationOrigin != null)
+            {
+                child.RotationOrigin = BoxReshape.Add(child.RotationOrigin, shift);
+            }
+        }
+    }
+
+    // Clears the remembered inverse resting position of the element and everything attached below it.
+    private static void ClearInverseTransforms(ShapeElement element)
+    {
+        element.inverseModelTransform = null;
+        if (element.Children == null)
+        {
+            return;
+        }
+        for (int i = 0; i < element.Children.Length; i++)
+        {
+            ClearInverseTransforms(element.Children[i]);
+        }
     }
 
     // ---------------- Info text ----------------

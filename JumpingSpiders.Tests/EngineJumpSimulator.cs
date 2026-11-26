@@ -27,6 +27,9 @@ public class EngineJumpSimulator
     public double MotionY;
     public double MotionZ;
     public bool OnGround = true;
+
+    /// <summary>True when the last tick's move was stopped by the floor (the engine's CollidedVertically).</summary>
+    public bool CollidedVertically;
     public double FloorY;
 
     /// <summary>When false the ground friction after take-off is left out, to compare against the pure model.</summary>
@@ -97,6 +100,7 @@ public class EngineJumpSimulator
         X += MotionX * dtFactor;
         Z += MotionZ * dtFactor;
 
+        CollidedVertically = collidedVertically;
         OnGround = collidedVertically && prevYMotion <= 0;
         TicksDone++;
     }

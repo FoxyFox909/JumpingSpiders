@@ -45,17 +45,16 @@ public class AiTaskSpiderJumpFlee : AiTaskBaseTargetable
     private readonly int replanIntervalMs;
     private readonly float moveSpeed;
     private readonly int searchIntervalMs;
-    private readonly string runAnimation;
 
     // ---- State of the current flee session ----
     private readonly JumpRunner runner;
+    private readonly Walker walker;
     private long nextSearchMs;
     private long fleeUntilMs;
     private long nextJumpMs;
-    private bool running;
     private bool wasJumping;
 
-    /// <summary>How many flee jumps this session made (read by debug tools).</summary>
+    /// <summary>How many flee jumps this session made (for the debug log).</summary>
     public int JumpsThisSession;
 
     /// <summary>Fleeing is not an attack, so the world's "creature hostility" setting does not switch it off.</summary>
@@ -77,7 +76,7 @@ public class AiTaskSpiderJumpFlee : AiTaskBaseTargetable
         // true = flee from whoever caused the emotion state in whenInEmotionState (the attacker), whatever it is.
         fleeFromEmotionSource = taskConfig["fleeFromEmotionSource"].AsBool(false);
         // Milliseconds: longest flee session.
-        fleeDurationMs = taskConfig["fleeDurationMs"].AsInt(6000);
+        fleeDurationMs = taskConfig["fleeDurationMs"].AsInt(5000);
         // Blocks: how far from the spider, straight away from the threat, the landing area is centred.
         jumpDistance = taskConfig["jumpDistance"].AsFloat(4.5f);
         // Blocks: radius of the ball around that point in which a landing spot is picked.
@@ -94,14 +93,19 @@ public class AiTaskSpiderJumpFlee : AiTaskBaseTargetable
         moveSpeed = taskConfig["movespeed"].AsFloat(0.04f);
         // Milliseconds: how often it looks for a threat while not fleeing.
         searchIntervalMs = taskConfig["searchIntervalMs"].AsInt(250);
-        // Animation codes from the entity JSON; "" = none.
-        runAnimation = SpiderTaskUtil.ReadAnimation(taskConfig, "runAnimation", "run");
 
         runner = new JumpRunner(entity);
         runner.JumpAnimation = SpiderTaskUtil.ReadAnimation(taskConfig, "jumpAnimation", "jump");
         // Fleeing jumps have no wind-up: the spider leaves at once.
         runner.WindUpMinSeconds = 0;
         runner.WindUpMaxSeconds = 0;
+
+        walker = new Walker(entity, pathTraverser);
+        // Animation code from the entity JSON; "" = none.
+        walker.Animation = SpiderTaskUtil.ReadAnimation(taskConfig, "runAnimation", "run");
+        // Arrived or stuck: the run animation stops; the next plan or run follows after replanIntervalMs.
+        walker.StopAnimationOnArrival = true;
+        walker.StopAnimationOnFailure = true;
     }
 
     /// <summary>Nothing may interrupt the spider while it is in the air.</summary>
@@ -192,11 +196,13 @@ public class AiTaskSpiderJumpFlee : AiTaskBaseTargetable
         base.StartExecute();
         fleeUntilMs = entity.World.ElapsedMilliseconds + fleeDurationMs;
         nextJumpMs = 0;
-        running = false;
         wasJumping = false;
         JumpsThisSession = 0;
-        SpiderTaskUtil.Log(entity, LogName, "flees from " + targetEntity.Code + " " + targetEntity.EntityId + " at "
-            + SpiderTaskUtil.HorizontalDistance(entity, targetEntity).ToString("0.00") + " blocks");
+        if (SpiderTaskUtil.IsDebugLogOn())
+        {
+            SpiderTaskUtil.Log(entity, LogName, "flees from " + targetEntity.Code + " " + targetEntity.EntityId + " at "
+                + SpiderTaskUtil.HorizontalDistance(entity, targetEntity).ToString("0.00") + " blocks");
+        }
     }
 
     public override bool ContinueExecute(float dt)
@@ -215,29 +221,41 @@ public class AiTaskSpiderJumpFlee : AiTaskBaseTargetable
         {
             wasJumping = false;
             nextJumpMs = now + pauseBetweenJumpsMs;
-            string distanceText = "?";
-            if (!SpiderTaskUtil.IsGone(entity, targetEntity))
+            if (SpiderTaskUtil.IsDebugLogOn())
             {
-                distanceText = SpiderTaskUtil.HorizontalDistance(entity, targetEntity).ToString("0.00");
+                string distanceText = "?";
+                if (!SpiderTaskUtil.IsGone(entity, targetEntity))
+                {
+                    distanceText = SpiderTaskUtil.HorizontalDistance(entity, targetEntity).ToString("0.00");
+                }
+                SpiderTaskUtil.Log(entity, LogName, "flee jump " + JumpsThisSession + " over (" + runner.LastEndReason
+                    + "), now " + distanceText + " blocks from the threat");
             }
-            SpiderTaskUtil.Log(entity, LogName, "flee jump " + JumpsThisSession + " over (" + runner.LastEndReason
-                + "), now " + distanceText + " blocks from the threat");
         }
 
         if (SpiderTaskUtil.IsGone(entity, targetEntity))
         {
-            SpiderTaskUtil.Log(entity, LogName, "threat gone");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "threat gone");
+            }
             return false;
         }
         double distance = SpiderTaskUtil.HorizontalDistance(entity, targetEntity);
         if (distance >= safeDistance)
         {
-            SpiderTaskUtil.Log(entity, LogName, "safe at " + distance.ToString("0.00") + " blocks after " + JumpsThisSession + " jumps");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "safe at " + distance.ToString("0.00") + " blocks after " + JumpsThisSession + " jumps");
+            }
             return false;
         }
         if (now > fleeUntilMs)
         {
-            SpiderTaskUtil.Log(entity, LogName, "flee time over at " + distance.ToString("0.00") + " blocks after " + JumpsThisSession + " jumps");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "flee time over at " + distance.ToString("0.00") + " blocks after " + JumpsThisSession + " jumps");
+            }
             return false;
         }
         if (!entity.OnGround || now < nextJumpMs)
@@ -248,7 +266,7 @@ public class AiTaskSpiderJumpFlee : AiTaskBaseTargetable
         List<JumpStep> plan = PlanFleeJump(distance);
         if (plan != null)
         {
-            StopRunning();
+            walker.Stop();
             runner.Start(plan);
             wasJumping = true;
             JumpsThisSession++;
@@ -262,10 +280,13 @@ public class AiTaskSpiderJumpFlee : AiTaskBaseTargetable
     public override void FinishExecute(bool cancelled)
     {
         runner.Stop();
-        StopRunning();
+        walker.Stop();
         if (cancelled)
         {
-            SpiderTaskUtil.Log(entity, LogName, "interrupted after " + JumpsThisSession + " jumps");
+            if (SpiderTaskUtil.IsDebugLogOn())
+            {
+                SpiderTaskUtil.Log(entity, LogName, "interrupted after " + JumpsThisSession + " jumps");
+            }
         }
         base.FinishExecute(cancelled);
     }
@@ -291,31 +312,6 @@ public class AiTaskSpiderJumpFlee : AiTaskBaseTargetable
         double awayZ;
         FleeDirection.AwayPoint(entity.Pos.X, entity.Pos.Z, targetEntity.Pos.X, targetEntity.Pos.Z, safeDistance,
             entity.Pos.Yaw, out awayX, out awayZ);
-        pathTraverser.WalkTowards(new Vec3d(awayX, entity.Pos.Y, awayZ), moveSpeed, RunStopDistance, OnRunEnded, OnRunEnded);
-        if (!running)
-        {
-            running = true;
-            SpiderTaskUtil.StartAnimation(entity, runAnimation);
-        }
-    }
-
-    private void StopRunning()
-    {
-        pathTraverser.Stop();
-        if (running)
-        {
-            running = false;
-            SpiderTaskUtil.StopAnimation(entity, runAnimation);
-        }
-    }
-
-    // Pathfinder callback for both "arrived" and "stuck": stop the run animation; the next plan or run follows.
-    private void OnRunEnded()
-    {
-        if (running)
-        {
-            running = false;
-            SpiderTaskUtil.StopAnimation(entity, runAnimation);
-        }
+        walker.RunTowards(new Vec3d(awayX, entity.Pos.Y, awayZ), moveSpeed, RunStopDistance);
     }
 }

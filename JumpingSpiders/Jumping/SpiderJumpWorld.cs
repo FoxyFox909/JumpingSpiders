@@ -15,13 +15,12 @@ namespace JumpingSpiders;
 /// - Dimensions: the game can stack extra mini-worlds above the normal one by offsetting Y. Positions here use
 ///   the entity's ordinary Y; the dimension offset is added only where the game's collision code wants it.
 ///
+/// It also answers ISolidPointWorld (is this exact point inside a block?) for the line checks of hammock building.
+///
 /// Main thread only (it reuses scratch objects). It reads blocks through the world's normal block accessor.
 /// </summary>
-public class SpiderJumpWorld : IJumpWorld
+public class SpiderJumpWorld : IJumpWorld, ISolidPointWorld
 {
-    /// <summary>How far below the feet (blocks) we probe to decide that there is something to stand on.</summary>
-    public const double FootingProbeDepth = 0.05;
-
     private readonly IBlockAccessor blockAccessor;
     private readonly Cuboidf collisionBox;
     private readonly int dimension;
@@ -103,7 +102,33 @@ public class SpiderJumpWorld : IJumpWorld
             return false;
         }
         // Footing: lowered a little, the box must hit something.
-        return !IsFree(feetX, standY - FootingProbeDepth, feetZ);
+        return !IsFree(feetX, standY - JumpPlanner.FootingProbeDepth, feetZ);
+    }
+
+    public bool IsSolidAt(double x, double y, double z)
+    {
+        int cellX = (int)System.Math.Floor(x);
+        int cellY = (int)System.Math.Floor(y);
+        int cellZ = (int)System.Math.Floor(z);
+        cellPos.Set(cellX, cellY, cellZ);
+        Block block = blockAccessor.GetMostSolidBlock(cellPos);
+        Cuboidf[] boxes = block.GetCollisionBoxes(blockAccessor, cellPos);
+        if (boxes == null)
+        {
+            return false;
+        }
+        double inX = x - cellX;
+        double inY = y - cellY;
+        double inZ = z - cellZ;
+        for (int i = 0; i < boxes.Length; i++)
+        {
+            Cuboidf box = boxes[i];
+            if (box != null && inX >= box.X1 && inX <= box.X2 && inY >= box.Y1 && inY <= box.Y2 && inZ >= box.Z1 && inZ <= box.Z2)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     // The highest collision box top of the block in this cell, relative to the cell (0 when it has none).

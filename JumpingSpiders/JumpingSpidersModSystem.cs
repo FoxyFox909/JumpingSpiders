@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using Vintagestory.API.Common;
 using Vintagestory.API.Server;
 
@@ -45,6 +46,7 @@ public class JumpingSpidersModSystem : ModSystem
 
     // Reads ModConfig/jumpingspiders.json. A missing file gets created with the defaults. A file that cannot be
     // read (for example a typo in the JSON) is left untouched so the player can fix it, and the defaults are used.
+    // Values that would break the mod are corrected and each correction is logged as a warning (Validate).
     private JumpingSpidersConfig LoadConfig(ICoreAPI api)
     {
         JumpingSpidersConfig loaded = null;
@@ -76,6 +78,14 @@ public class JumpingSpidersModSystem : ModSystem
         catch (Exception e)
         {
             Mod.Logger.Warning("Could not write ModConfig/{0}: {1}", ConfigFileName, e.Message);
+        }
+
+        // Then correct values that would break the mod, for this session only: the file keeps what the player wrote,
+        // so the warning comes back at every start until it is fixed there.
+        List<string> corrections = loaded.Validate();
+        for (int i = 0; i < corrections.Count; i++)
+        {
+            Mod.Logger.Warning("ModConfig/{0}: {1}", ConfigFileName, corrections[i]);
         }
         return loaded;
     }

@@ -78,4 +78,30 @@ public class HeightWeightedPickerTests
         heights.Add(5);
         Assert.Equal(0, HeightWeightedPicker.PickIndex(heights, 3, new Random(1)));
     }
+
+    [Fact]
+    public void WeighingOnceGivesTheSamePicksAsWeighingEveryTime()
+    {
+        // Pick and drop until nothing is left, once with PickIndex on the remaining heights every time, once with the
+        // weights computed once and kept in step by RemoveAt. The lowest candidates (0 and 1) are dropped along the
+        // way, so the weights must be redone at least once.
+        double[] start = new double[] { 0, 3, 1, 7, 2, 2, 5, 0.5 };
+        for (int seed = 0; seed < 20; seed++)
+        {
+            List<double> plain = new List<double>(start);
+            List<double> kept = new List<double>(start);
+            List<double> weights = HeightWeightedPicker.Weights(kept, 2);
+            Random randA = new Random(seed);
+            Random randB = new Random(seed);
+            while (plain.Count > 0)
+            {
+                int a = HeightWeightedPicker.PickIndex(plain, 2, randA);
+                int b = HeightWeightedPicker.PickIndexByWeight(weights, randB);
+                Assert.Equal(a, b);
+                plain.RemoveAt(a);
+                HeightWeightedPicker.RemoveAt(kept, weights, b, 2);
+            }
+            Assert.Empty(weights);
+        }
+    }
 }

@@ -4,6 +4,7 @@ using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
 using Vintagestory.API.MathTools;
 using Vintagestory.API.Server;
+using Vintagestory.GameContent;
 
 namespace JumpingSpiders;
 
@@ -24,8 +25,11 @@ public static class SpiderCommands
     /// <summary>How far, in blocks, the commands look for the nearest spider when you do not look at one.</summary>
     public const float TargetSearchRange = 32;
 
-    /// <summary>How far, in blocks, /jspider build looks for the hammock it just built (to say where it is).</summary>
-    public const double BuiltHammockSearchRange = 24;
+    /// <summary>
+    /// Most tree trunks /jspider spawn tests for a new hammock spot (the nearest ones). More than the natural
+    /// spawner's Config.WildHammockTreesPerAttempt, since a command may take a little longer (about 8 ms a trunk).
+    /// </summary>
+    public const int ForcedSpawnTreesToTest = 6;
 
     private static ICoreServerAPI sapi;
 
@@ -61,12 +65,14 @@ public static class SpiderCommands
                 .HandleWith(OnGeneration)
             .EndSubCommand()
             .BeginSubCommand("spawn")
-                .WithDescription("Tries a wild spawn in the chunk you stand in, now, and says why it failed. Ignores only the distance-to-players rule and the cooldown. Options: hammock / nohammock (default: the config's chance), day / night (default: the real time).")
+                .WithDescription("Spawns a wild spider " + WildSpiderSpawner.ForcedSpawnMinDistance + " to " + WildSpiderSpawner.ForcedSpawnMaxDistance
+                    + " blocks from you, in any chunk, and lists the rules that would stop a natural spawn here (spider chunk, climate, cooldown, claims, buildings, kept spiders, cap). Options: hammock (on a tree within "
+                    + JumpingSpidersModSystem.Config.WildSpawnRadiusFromHammock + " blocks, asleep in it at night) / nohammock (default: the config's chance), day / night (default: the real time).")
                 .WithArgs(parsers.OptionalWordRange("hammock", "auto", "hammock", "nohammock"), parsers.OptionalWordRange("time", "now", "day", "night"))
                 .HandleWith(OnSpawn)
             .EndSubCommand()
             .BeginSubCommand("build")
-                .WithDescription("Makes the domesticated adult spider you look at (or the nearest) try to build a hammock now, as after a meal.")
+                .WithDescription("Makes the domesticated adult spider you look at (or the nearest) start a hammock build attempt now, ignoring its hourly timer and its hunger. Says which spot it picked and how the attempt ended (in chat when that comes later).")
                 .HandleWith(OnBuild)
             .EndSubCommand();
     }
@@ -169,16 +175,20 @@ public static class SpiderCommands
         {
             request.HammockChance = 0;
         }
+        // Forced: spawn here whatever the natural rules say, next to the caller, and report the rules it skipped.
+        // The distance-to-players rules are not even checked: the player stands right there on purpose.
+        request.Forced = true;
+        request.SpawnNear = pos;
         request.CheckPlayerDistance = false;
-        request.CheckCooldown = false;
+        request.MaxTreesToTest = ForcedSpawnTreesToTest;
         request.PlayerPositions = SpiderSpawnSystem.GetPlayerPositions(sapi);
 
         SpawnResult result = WildSpiderSpawner.TrySpawn(sapi, request);
         StringBuilder text = new StringBuilder();
         text.Append(result.Outcome + ": " + result.Message);
-        if (result.Outcome == SpawnOutcome.NotSpiderChunk)
+        if (result.Spider != null || result.BypassedRules.Count > 0)
         {
-            text.Append("\n" + SpiderCommandText.DescribeNearestSpiderChunks(sapi, pos, chunkX, chunkZ));
+            text.Append("\n" + SpiderCommandText.DescribeBypassedRules(result));
         }
         if (result.Spider != null)
         {
@@ -194,33 +204,22 @@ public static class SpiderCommands
         {
             return NoSpiderFound();
         }
-        EntityAgent agent = spider as EntityAgent;
-        if (agent == null || !SpiderAttributes.IsAdult(spider))
+        if (!SpiderAttributes.IsAdult(spider))
         {
-            return TextCommandResult.Error("Only adult spiders build hammocks.");
+            return TextCommandResult.Error("Spider id " + spider.EntityId + " is a baby; babies never build.");
         }
         if (!SpiderAttributes.IsDomesticated(spider))
         {
             return TextCommandResult.Error("Spider id " + spider.EntityId + " is wild; wild spiders never build. Try /jspider generation 1 first.");
         }
-
-        List<BlockEntitySilkHammock> before = HammockFinder.FindAllWithin(sapi.World, spider.Pos.XYZ, BuiltHammockSearchRange);
-        bool built = HammockBuilder.TryBuildHammockFor(agent);
-        if (!built)
+        AiTaskSpiderBuildHammock task = FindBuildTask(spider);
+        if (task == null)
         {
-            return TextCommandResult.Success("Spider id " + spider.EntityId + " found no spot it could jump into (within "
-                + JumpingSpidersModSystem.Config.HammockBuildSearchRadius + " blocks, keeping the hammock spacing).");
+            return TextCommandResult.Error("Spider id " + spider.EntityId + " has no jumpingspiders.buildhammock task in its entity JSON.");
         }
-        List<BlockEntitySilkHammock> after = HammockFinder.FindAllWithin(sapi.World, spider.Pos.XYZ, BuiltHammockSearchRange);
-        for (int i = 0; i < after.Count; i++)
-        {
-            if (!before.Contains(after[i]))
-            {
-                return TextCommandResult.Success("Spider id " + spider.EntityId + " built a hammock at "
-                    + SpiderCommandText.ShowPos(sapi, after[i].Pos) + ".");
-            }
-        }
-        return TextCommandResult.Success("Spider id " + spider.EntityId + " built a hammock.");
+        // The task picks the spot and checks the spacing now, and does the rest over the next ticks.
+        IServerPlayer caller = args.Caller.Player as IServerPlayer;
+        return TextCommandResult.Success("Spider id " + spider.EntityId + " " + task.StartForcedAttempt(caller));
     }
 
     // ---------------- Helpers ----------------
@@ -248,12 +247,27 @@ public static class SpiderCommands
                 return looked;
             }
         }
-        return sapi.World.GetNearestEntity(CallerPosition(args), TargetSearchRange, TargetSearchRange, IsLivingSpider);
+        return sapi.World.GetNearestEntity(CallerPosition(args), TargetSearchRange, TargetSearchRange, SpiderAttributes.IsLivingSpider);
     }
 
-    private static bool IsLivingSpider(Entity entity)
+    /// <summary>The spider's build task (from its entity JSON), or null when it has none (babies).</summary>
+    public static AiTaskSpiderBuildHammock FindBuildTask(Entity spider)
     {
-        return entity.Alive && SpiderAttributes.IsSpider(entity);
+        EntityBehaviorTaskAI taskAi = spider.GetBehavior<EntityBehaviorTaskAI>();
+        if (taskAi == null)
+        {
+            return null;
+        }
+        List<IAiTask> tasks = taskAi.TaskManager.AllTasks;
+        for (int i = 0; i < tasks.Count; i++)
+        {
+            AiTaskSpiderBuildHammock build = tasks[i] as AiTaskSpiderBuildHammock;
+            if (build != null)
+            {
+                return build;
+            }
+        }
+        return null;
     }
 
     private static TextCommandResult NoSpiderFound()

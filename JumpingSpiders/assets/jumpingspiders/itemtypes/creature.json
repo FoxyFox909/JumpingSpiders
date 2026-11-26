@@ -10,16 +10,18 @@
 	variantgroups: [
 		{ code: "type", states: ["jumpingspider-adult-male", "jumpingspider-adult-female", "jumpingspider-baby-male", "jumpingspider-baby-female"] }
 	],
-	// The item is drawn with the entity's own shape and texture.
+	// The item is drawn with the entity's own shape and texture. Both adult sexes use the adult model (male.json, named
+	// after the editor project) and its base texture (male.png); an item has no texture variants and no per-sex element
+	// scales, so the female's item shows the male's pedipalps.
 	shapeByType: {
-		"*-adult-male": { base: "jumpingspiders:entity/land/jumpingspider/male" },
-		"*-adult-female": { base: "jumpingspiders:entity/land/jumpingspider/female" },
+		"*-adult-*": { base: "jumpingspiders:entity/land/jumpingspider/male" },
+		// PLACEHOLDER: the baby's box model, until the author makes the spiderling model.
 		"*-baby-*": { base: "jumpingspiders:entity/land/jumpingspider/baby" }
 	},
 	texturesByType: {
-		// "null": the male model's faces have no texture yet (see the entity JSON). Remove once it is textured.
-		"*-adult-male": { "skin": { base: "game:entity/animal/mammal/hare/european-male1" }, "null": { base: "game:entity/animal/mammal/hare/european-male1" } },
-		"*-adult-female": { "skin": { base: "game:entity/animal/mammal/hare/european-female1" } },
+		// The adult model's faces use the texture code "male" (see the adult entity JSON).
+		"*-adult-*": { "male": { base: "jumpingspiders:male" } },
+		// PLACEHOLDER: a vanilla hare texture for the baby's box model.
 		"*-baby-*": { "skin": { base: "game:entity/animal/mammal/hare/european-baby" } }
 	},
 	creativeinventory: { "general": ["*"], "items": ["*"], "creatures": ["*"] },

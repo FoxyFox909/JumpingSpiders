@@ -5,9 +5,9 @@ namespace JumpingSpiders;
 /// Filled in by JumpMath.SolveLaunch and handed to JumpController.Launch in the game.
 ///
 /// Positions are "feet positions": the bottom centre of the spider's collision box, in blocks.
-/// Velocities are in blocks per second. VX and VZ are the horizontal speed the spider really
-/// travels at (JumpController keeps it constant during the flight); VY is the vertical launch speed,
-/// after which gravity and air drag take over.
+/// Velocities and times describe the natural arc: the jump as the game's own gravity and air drag would fly it,
+/// with VX and VZ held constant and VY the vertical launch speed. In the game the spider flies this same arc
+/// Config.JumpFlightSpeedMultiplier times as fast (FlightSchedule has the real timing).
 /// </summary>
 public class JumpStep
 {
@@ -28,9 +28,12 @@ public class JumpStep
     /// <summary>Horizontal velocity along Z, blocks per second, held constant during the flight.</summary>
     public double VZ;
 
-    /// <summary>Time from take-off to touching down, in seconds. Always a whole number of physics ticks.</summary>
+    /// <summary>
+    /// Time from take-off to touching down on the natural arc, in seconds. Always a whole number of physics ticks.
+    /// The real flight is shorter: FlightSchedule.DrivenSeconds.
+    /// </summary>
     public double FlightSeconds;
 
-    /// <summary>The same time counted in physics ticks (1/30 s each).</summary>
+    /// <summary>The same time counted in physics ticks (1/30 s each), on the natural arc.</summary>
     public int FlightTicks;
 }

@@ -107,21 +107,54 @@ public class BlockEntitySilkHammock : BlockEntity, IPointOfInterest
         }
     }
 
-    /// <summary>Feet position for a spider resting in the hammock: the cell's centre, standing on the hammock's floor.</summary>
+    /// <summary>
+    /// Feet position for a spider sleeping in the hammock: the cell's centre, at BlockSilkHammock.GetSleepFeetHeight
+    /// (the cradle's bottom for wall and ceiling hammocks, the base for floor hammocks).
+    /// </summary>
     public Vec3d GetSleepPosition()
     {
+        double feetHeight = 0;
+        BlockSilkHammock hammock = GetHammockBlock();
+        if (hammock != null)
+        {
+            feetHeight = hammock.GetSleepFeetHeight();
+        }
+        // Pos.Y, not InternalY: entity positions keep the dimension apart (EntityPos.Dimension), like BlockPos does.
+        return new Vec3d(Pos.X + 0.5, Pos.Y + feetHeight, Pos.Z + 0.5);
+    }
+
+    /// <summary>Feet height (absolute Y) for a spider standing awake in the hammock: on its collision box from the JSON.</summary>
+    public double GetStandFeetY()
+    {
         double floorTop = 0;
+        BlockSilkHammock hammock = GetHammockBlock();
+        if (hammock != null)
+        {
+            floorTop = hammock.GetFloorTop();
+        }
+        return Pos.Y + floorTop;
+    }
+
+    /// <summary>Yaw for a spider resting in the hammock: looking out through the opening (BlockSilkHammock.GetSleepYaw).</summary>
+    public float GetSleepYaw()
+    {
+        BlockSilkHammock hammock = GetHammockBlock();
+        if (hammock == null)
+        {
+            return 0;
+        }
+        return hammock.GetSleepYaw();
+    }
+
+    // The hammock variant at this position. Block is set by the game when the block entity is created.
+    private BlockSilkHammock GetHammockBlock()
+    {
         BlockSilkHammock hammock = Block as BlockSilkHammock;
         if (hammock == null && Api != null)
         {
             hammock = Api.World.BlockAccessor.GetBlock(Pos) as BlockSilkHammock;
         }
-        if (hammock != null)
-        {
-            floorTop = hammock.GetFloorTop();
-        }
-        // Pos.Y, not InternalY: entity positions keep the dimension apart (EntityPos.Dimension), like BlockPos does.
-        return new Vec3d(Pos.X + 0.5, Pos.Y + floorTop, Pos.Z + 0.5);
+        return hammock;
     }
 
     /// <summary>

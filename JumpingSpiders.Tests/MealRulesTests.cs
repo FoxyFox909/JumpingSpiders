@@ -59,11 +59,18 @@ public class MealRulesTests
     }
 
     [Fact]
-    public void OnlyDomesticatedAdultsBuildAfterAMeal()
+    public void OnlyDomesticatedAdultsEarnAHammock()
     {
-        Assert.True(MealRules.ShouldBuildHammock(true, true, true));
-        Assert.False(MealRules.ShouldBuildHammock(false, true, true));
-        Assert.False(MealRules.ShouldBuildHammock(true, true, false));
-        Assert.False(MealRules.ShouldBuildHammock(true, false, true));
+        Assert.True(MealRules.ShouldBuildHammock(true, true, true, false));
+        Assert.False(MealRules.ShouldBuildHammock(true, true, false, false));
+        Assert.False(MealRules.ShouldBuildHammock(true, false, true, false));
+    }
+
+    [Fact]
+    public void AnyKillEarnsAHammockUnlessFarmPreyIsRequired()
+    {
+        Assert.True(MealRules.ShouldBuildHammock(false, true, true, false));
+        Assert.False(MealRules.ShouldBuildHammock(false, true, true, true));
+        Assert.True(MealRules.ShouldBuildHammock(true, true, true, true));
     }
 }

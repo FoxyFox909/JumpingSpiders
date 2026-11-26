@@ -33,6 +33,11 @@
 	},
 	client: {
 		renderer: "Shape",
+		// PLACEHOLDER: a box model with a vanilla hare texture, until the author makes the spiderling model (based on
+		// the adult model and its animations) and its texture.
+		// Texture variants: the baby has none, so a grown-up spider rolls its own adult texture variant. When the baby
+		// gets as many alternates as the adult's "male" texture (one today), the vanilla grow behavior carries the
+		// baby's variant ("textureIndex") over to the adult instead.
 		shape: { base: "jumpingspiders:entity/land/jumpingspider/baby" },
 		textures: {
 			"skin": { base: "game:entity/animal/mammal/hare/european-baby" }
@@ -63,9 +68,10 @@
 			{ code: "repulseagents" },
 			{ code: "controlledphysics", stepHeight: 1.1251 },
 			// See the adult file: wild babies despawn, babies the player caught or bred never do.
-			{ code: "despawn", minPlayerDistance: 32, minSeconds: 600 },
+			{ code: "despawn", minPlayerDistance: 96, minSeconds: 600 },
 			{ code: "health", currenthealth: 3, maxhealth: 3 },
-			{ code: "deaddecay", hoursToDecay: 48, decayedBlock: "game:carcass-tiny" },
+			// No "decayedBlock": a dead spiderling leaves no bone pile behind (see the adult file).
+			{ code: "deaddecay", hoursToDecay: 48 },
 			{ code: "floatupwhenstuck", onlyWhenDead: true },
 			{ code: "harvestable", drops: [] },
 			{ code: "breathe" },
@@ -92,9 +98,11 @@
 				// Keep this list sorted by descending priority. Every AI tick the game walks it in this order and starts
 				// the first task that wants to run; a later task can take over from a running one only when its priority is
 				// strictly higher than the running task's priorityForCancel.
-				// The jumpingspiders.* tasks are explained in their C# files (AiTasks folder). Every key they read is
-				// written out below with the code's default, so all of them can be tuned here. Times are in milliseconds
-				// (ms), distances in blocks. Animation codes refer to "animations" above; "" = none. The physical jump
+				// The jumpingspiders.* tasks are explained in their C# files (AiTasks folder). Every key that matters
+				// for them is written out below, so all of them can be tuned here. The values are the adult's (see
+				// jumpingspider-adult.json for where those differ from the code's defaults), except the bite damage,
+				// the explore task's maxHops and the vanilla fleeentity entry. Times are in milliseconds (ms), distances
+				// in blocks. Animation codes refer to "animations" above; "" = none. The physical jump
 				// ability (how high and far a jump goes) is in ModConfig/jumpingspiders.json instead.
 				aitasks: [
 					{
@@ -107,12 +115,11 @@
 						// Only whoever caused the anger (the player who hit it or broke its hammock), never a bystander.
 						targetEmotionSource: true,
 						onlyWhenHungry: false,
-						tamingGenerations: 1000,
 						seekingRange: 10,
 						loseTargetRange: 20,
 						pounceRange: 5,
-						windUpMinMs: 500,
-						windUpMaxMs: 1250,
+						windUpMinMs: 350,
+						windUpMaxMs: 900,
 						leadFactor: 0.5,
 						hitReach: 0.4,
 						damage: 1,
@@ -206,8 +213,8 @@
 						maxLaunchSpotPlanChecks: 8,
 						maxTravelAttempts: 3,
 						travelTimeoutMs: 30000,
-						windUpMinMs: 200,
-						windUpMaxMs: 400,
+						windUpMinMs: 350,
+						windUpMaxMs: 900,
 						pauseBetweenJumpsMs: 300,
 						turnSpeedDegPerSec: 360,
 						leaveJumpRadius: 4,
@@ -253,8 +260,8 @@
 						territoryRadius: 12,
 						pauseMinMs: 800,
 						pauseMaxMs: 3000,
-						windUpMinMs: 250,
-						windUpMaxMs: 600,
+						windUpMinMs: 350,
+						windUpMaxMs: 900,
 						turnSpeedDegPerSec: 360,
 						// Rest after an outing (ms).
 						mincooldown: 8000,
